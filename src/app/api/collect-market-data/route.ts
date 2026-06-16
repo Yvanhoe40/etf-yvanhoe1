@@ -13,6 +13,7 @@ export async function GET() {
   const { data: etfs, error } = await supabase
     .from("etfs")
     .select("id, ticker, name, exchange, currency, region, topic")
+    .eq("ticker", "NUCL.PA")
     .limit(1);
 
   if (error) {
