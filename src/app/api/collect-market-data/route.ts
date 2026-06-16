@@ -1,50 +1,65 @@
-export async function GET() {
-  const apiKey = process.env.TWELVE_DATA_API_KEY;
+import { supabase } from "@/lib/supabase";
 
-  if (!apiKey) {
-    return Response.json(
-      { error: "TWELVE_DATA_API_KEY is missing" },
-      { status: 500 }
-    );
+export async function GET() {
+  const { data: etfs, error } = await supabase
+    .from("etfs")
+    .select("id, ticker, name, exchange, currency, region, topic, is_active")
+    .eq("is_active", true)
+    .limit(1);
+
+  if (error) {
+    return Response.json({ error: error.message }, { status: 500 });
   }
 
-  const symbol = "NUCL";
-  const exchange = "EURONEXT";
+  if (!etfs || etfs.length === 0) {
+    return Response.json({ error: "No active ETF found" }, { status: 404 });
+  }
 
-  const searchUrl = new URL("https://api.twelvedata.com/symbol_search");
-  searchUrl.searchParams.set("symbol", symbol);
-  searchUrl.searchParams.set("apikey", apiKey);
+  const etf = etfs[0];
+  const yahooSymbol = etf.ticker;
 
-  const quoteUrl = new URL("https://api.twelvedata.com/quote");
-  quoteUrl.searchParams.set("symbol", symbol);
-  quoteUrl.searchParams.set("exchange", exchange);
-  quoteUrl.searchParams.set("apikey", apiKey);
+  const quoteUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+    yahooSymbol
+  )}?interval=1d&range=1mo`;
 
-  const timeSeriesUrl = new URL("https://api.twelvedata.com/time_series");
-  timeSeriesUrl.searchParams.set("symbol", symbol);
-  timeSeriesUrl.searchParams.set("exchange", exchange);
-  timeSeriesUrl.searchParams.set("interval", "1day");
-  timeSeriesUrl.searchParams.set("outputsize", "5");
-  timeSeriesUrl.searchParams.set("apikey", apiKey);
+  const response = await fetch(quoteUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+    },
+    cache: "no-store",
+  });
 
-  const [searchResponse, quoteResponse, timeSeriesResponse] =
-    await Promise.all([
-      fetch(searchUrl.toString()),
-      fetch(quoteUrl.toString()),
-      fetch(timeSeriesUrl.toString()),
-    ]);
+  const yahooData = await response.json();
+  const result = yahooData?.chart?.result?.[0];
 
-  const [searchData, quoteData, timeSeriesData] = await Promise.all([
-    searchResponse.json(),
-    quoteResponse.json(),
-    timeSeriesResponse.json(),
-  ]);
+  if (!result) {
+    return Response.json({
+      status: "error",
+      testedEtf: etf,
+      yahooResponse: yahooData,
+    });
+  }
+
+  const meta = result.meta;
+  const timestamps = result.timestamp || [];
+  const quote = result.indicators?.quote?.[0] || {};
+
+  const candles = timestamps.map((timestamp: number, index: number) => ({
+    date: new Date(timestamp * 1000).toISOString().slice(0, 10),
+    open: quote.open?.[index] ?? null,
+    high: quote.high?.[index] ?? null,
+    low: quote.low?.[index] ?? null,
+    close: quote.close?.[index] ?? null,
+    volume: quote.volume?.[index] ?? null,
+  }));
 
   return Response.json({
-    testedSymbol: symbol,
-    testedExchange: exchange,
-    symbolSearch: searchData,
-    quote: quoteData,
-    timeSeries: timeSeriesData,
+    status: "ok",
+    testedEtf: etf,
+    yahooSymbol,
+    meta,
+    candlesCount: candles.length,
+    lastCandle: candles[candles.length - 1],
+    candles,
   });
 }
