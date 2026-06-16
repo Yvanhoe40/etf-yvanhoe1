@@ -44,6 +44,8 @@ export default function Home() {
   const [etfs, setEtfs] = useState<EtfWithSnapshot[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adminCode, setAdminCode] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const canEdit = adminCode === "topaz";
 
   const [isin, setIsin] = useState("");
@@ -90,6 +92,34 @@ export default function Home() {
     });
 
     setEtfs(sorted);
+  }
+
+  async function refreshMarketData() {
+    if (!canEdit) return;
+
+    setIsRefreshing(true);
+
+    try {
+      const response = await fetch("/api/collect-market-data");
+      const result = await response.json();
+
+      if (result.status !== "completed") {
+        console.log(result);
+        alert("Erreur pendant la collecte des données.");
+        return;
+      }
+
+      alert(
+        `Collecte terminée : ${result.successful}/${result.totalEtfs} ETF mis à jour`
+      );
+
+      await loadEtfs();
+    } catch (error) {
+      console.error(error);
+      alert("Erreur technique pendant le rafraîchissement.");
+    } finally {
+      setIsRefreshing(false);
+    }
   }
 
   function resetForm() {
@@ -178,6 +208,18 @@ export default function Home() {
             ? "Mode édition activé"
             : "Mode lecture seule : ajout, modification et suppression désactivés"}
         </p>
+
+        {canEdit && (
+          <button
+            onClick={refreshMarketData}
+            disabled={isRefreshing}
+            className="mt-4 rounded bg-emerald-600 px-5 py-3 font-semibold hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {isRefreshing
+              ? "Rafraîchissement en cours..."
+              : "Rafraîchir les données Yahoo Finance"}
+          </button>
+        )}
       </div>
 
       {canEdit && (
