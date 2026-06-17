@@ -36,27 +36,38 @@ async function collectOneEtf(etf: any) {
   const timestamps = result.timestamp || [];
   const quote = result.indicators?.quote?.[0] || {};
 
-  const candles: Candle[] = timestamps.map((timestamp: number, index: number) => ({
-    trading_date: new Date(timestamp * 1000).toISOString().slice(0, 10),
-    open: quote.open?.[index] ?? null,
-    high: quote.high?.[index] ?? null,
-    low: quote.low?.[index] ?? null,
-    close: quote.close?.[index] ?? null,
-    volume: quote.volume?.[index] ?? null,
-  }));
+  const candles: Candle[] = timestamps
+    .map((timestamp: number, index: number) => ({
+      trading_date: new Date(timestamp * 1000).toISOString().slice(0, 10),
+      open: quote.open?.[index] ?? null,
+      high: quote.high?.[index] ?? null,
+      low: quote.low?.[index] ?? null,
+      close: quote.close?.[index] ?? null,
+      volume: quote.volume?.[index] ?? null,
+    }))
+    .filter((candle: Candle) => candle.close !== null);
 
   const lastCandle = candles[candles.length - 1];
+  const previousCandle = candles[candles.length - 2];
 
   if (!lastCandle) {
     return {
       ticker: etf.ticker,
       status: "error",
-      error: "No candle found",
+      error: "No valid candle found",
     };
   }
 
-  const price = meta.regularMarketPrice ?? lastCandle.close;
-  const previousClose = meta.chartPreviousClose ?? null;
+  const price = lastCandle.close ?? meta.regularMarketPrice ?? null;
+  const previousClose = previousCandle?.close ?? null;
+
+  const dayChange =
+    price !== null && previousClose !== null ? price - previousClose : null;
+
+  const dayChangePercent =
+    dayChange !== null && previousClose !== null && previousClose !== 0
+      ? (dayChange / previousClose) * 100
+      : null;
 
   const { error: snapshotError } = await supabase
     .from("etf_market_snapshots")
@@ -67,17 +78,16 @@ async function collectOneEtf(etf: any) {
       high_price: lastCandle.high,
       low_price: lastCandle.low,
       previous_close: previousClose,
-      day_change:
-        price !== null && previousClose
-          ? price - previousClose
-          : null,
-      day_change_percent:
-        price !== null && previousClose
-          ? ((price - previousClose) / previousClose) * 100
-          : null,
+      day_change: dayChange,
+      day_change_percent: dayChangePercent,
       volume: lastCandle.volume,
       market_status: "COLLECTED",
-      raw_quote: meta,
+      raw_quote: {
+        source: "Yahoo Finance",
+        meta,
+        lastCandle,
+        previousCandle,
+      },
     });
 
   if (snapshotError) {
@@ -114,8 +124,12 @@ async function collectOneEtf(etf: any) {
     ticker: etf.ticker,
     status: "success",
     currentPrice: price,
+    previousClose,
+    dayChange,
+    dayChangePercent,
     upsertedCandles,
     lastCandle,
+    previousCandle,
   };
 }
 
