@@ -18,9 +18,21 @@ type Snapshot = {
   etf_id: string;
   snapshot_at: string;
   price: number | null;
+  open_price: number | null;
+  high_price: number | null;
+  low_price: number | null;
+  previous_close: number | null;
   day_change: number | null;
   day_change_percent: number | null;
   volume: number | null;
+  raw_quote: {
+    meta?: {
+      fiftyTwoWeekHigh?: number;
+      fiftyTwoWeekLow?: number;
+      fullExchangeName?: string;
+      exchangeName?: string;
+    };
+  } | null;
 };
 
 type EtfWithSnapshot = Etf & {
@@ -67,6 +79,11 @@ export default function Home() {
   function formatDate(value: string | null | undefined) {
     if (!value) return "-";
     return new Date(value).toLocaleString("fr-BE");
+  }
+
+  function distanceToHigh(price?: number | null, high?: number | null) {
+    if (!price || !high) return null;
+    return ((price - high) / high) * 100;
   }
 
   async function loadEtfs() {
@@ -267,6 +284,10 @@ export default function Home() {
           const snapshot = etf.snapshot;
           const isPositive = (snapshot?.day_change_percent || 0) >= 0;
 
+          const high52 = snapshot?.raw_quote?.meta?.fiftyTwoWeekHigh ?? null;
+          const low52 = snapshot?.raw_quote?.meta?.fiftyTwoWeekLow ?? null;
+          const distanceHigh = distanceToHigh(snapshot?.price, high52);
+
           return (
             <div
               key={etf.id}
@@ -331,6 +352,50 @@ export default function Home() {
                   <p className="text-sm font-semibold">
                     {formatDate(snapshot?.snapshot_at)}
                   </p>
+                </div>
+              </div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-8 rounded-lg bg-slate-800 p-4">
+                <div>
+                  <p className="text-xs text-slate-400">Open</p>
+                  <p className="font-semibold">{formatNumber(snapshot?.open_price)}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-400">High</p>
+                  <p className="font-semibold">{formatNumber(snapshot?.high_price)}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-400">Low</p>
+                  <p className="font-semibold">{formatNumber(snapshot?.low_price)}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-400">Close J-1</p>
+                  <p className="font-semibold">{formatNumber(snapshot?.previous_close)}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-400">52W High</p>
+                  <p className="font-semibold">{formatNumber(high52)}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-400">52W Low</p>
+                  <p className="font-semibold">{formatNumber(low52)}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-400">Écart 52W High</p>
+                  <p className="font-semibold">
+                    {formatNumber(distanceHigh)} %
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-400">Source</p>
+                  <p className="font-semibold">Yahoo</p>
                 </div>
               </div>
             </div>
