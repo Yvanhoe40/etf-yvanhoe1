@@ -47,18 +47,55 @@ async function collectOneEtf(etf: any) {
     }))
     .filter((candle: Candle) => candle.close !== null);
 
-  const lastCandle = candles[candles.length - 1];
-  const previousCandle = candles[candles.length - 2];
+  let upsertedCandles = 0;
 
-  if (!lastCandle) {
+  for (const candle of candles) {
+    const { error: candleError } = await supabase
+      .from("etf_ohlcv_daily")
+      .upsert(
+        {
+          etf_id: etf.id,
+          trading_date: candle.trading_date,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+          volume: candle.volume,
+          raw_candle: candle,
+        },
+        { onConflict: "etf_id,trading_date" }
+      );
+
+    if (!candleError) upsertedCandles++;
+  }
+
+  const { data: latestCandles, error: latestCandlesError } = await supabase
+    .from("etf_ohlcv_daily")
+    .select("trading_date, open, high, low, close, volume")
+    .eq("etf_id", etf.id)
+    .order("trading_date", { ascending: false })
+    .limit(2);
+
+  if (latestCandlesError) {
     return {
       ticker: etf.ticker,
       status: "error",
-      error: "No valid candle found",
+      error: latestCandlesError.message,
     };
   }
 
-  const price = lastCandle.close ?? meta.regularMarketPrice ?? null;
+  if (!latestCandles || latestCandles.length === 0) {
+    return {
+      ticker: etf.ticker,
+      status: "error",
+      error: "No candle found in database",
+    };
+  }
+
+  const lastCandle = latestCandles[0];
+  const previousCandle = latestCandles[1] || null;
+
+  const price = lastCandle.close ?? null;
   const previousClose = previousCandle?.close ?? null;
 
   const dayChange =
@@ -96,28 +133,6 @@ async function collectOneEtf(etf: any) {
       status: "error",
       error: snapshotError.message,
     };
-  }
-
-  let upsertedCandles = 0;
-
-  for (const candle of candles) {
-    const { error: candleError } = await supabase
-      .from("etf_ohlcv_daily")
-      .upsert(
-        {
-          etf_id: etf.id,
-          trading_date: candle.trading_date,
-          open: candle.open,
-          high: candle.high,
-          low: candle.low,
-          close: candle.close,
-          volume: candle.volume,
-          raw_candle: candle,
-        },
-        { onConflict: "etf_id,trading_date" }
-      );
-
-    if (!candleError) upsertedCandles++;
   }
 
   return {
