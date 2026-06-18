@@ -57,6 +57,8 @@ type PortfolioSummary = {
   unrealized_gain: number | null;
   performance_percent: number | null;
   positions_count?: number | null;
+  day_change_amount: number | null;
+  day_change_percent: number | null;
 };
 
 type PortfolioRealizedSummary = {
@@ -112,6 +114,7 @@ type TransactionForm = {
 const regions = ["World", "US", "Europe", "EM", "Commodities", "Sectors"];
 const exchanges = ["EURONEXT", "XETRA", "MILAN"];
 const currencies = ["EUR", "USD", "GBP", "CHF"];
+const brokers = ["MeDirect", "Keytrade", "Degiro", "Bolero"];
 
 const regionStyle: Record<string, string> = {
   World: "border-l-blue-500",
@@ -162,7 +165,7 @@ export default function Home() {
       quantity: "",
       price: "",
       fees: "",
-      broker: "",
+      broker: "MeDirect",
       note: "",
     };
   }
@@ -629,14 +632,38 @@ async function loadPortfolioRealizedSummary(
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-5">
+          <div className="grid gap-3 md:grid-cols-7">
             <div className="rounded-lg bg-slate-800 p-4">
               <p className="text-xs text-slate-400">Valeur totale</p>
               <p className="text-2xl font-bold">
                 {formatNumber(portfolioSummary.current_value)} EUR
               </p>
             </div>
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">Variation jour</p>
+              <p
+                className={`text-2xl font-bold ${
+                  (portfolioSummary.day_change_amount || 0) >= 0
+                    ? "text-green-400"
+                    : "text-red-400"
+                }`}
+              >
+                {formatNumber(portfolioSummary.day_change_amount)} EUR
+              </p>
+            </div>
 
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">Variation jour %</p>
+              <p
+                className={`text-2xl font-bold ${
+                  (portfolioSummary.day_change_percent || 0) >= 0
+                    ? "text-green-400"
+                    : "text-red-400"
+                }`}
+              >
+                {formatNumber(portfolioSummary.day_change_percent)} %
+              </p>
+            </div>
             <div className="rounded-lg bg-slate-800 p-4">
               <p className="text-xs text-slate-400">Capital investi</p>
               <p className="text-2xl font-bold">
@@ -1053,14 +1080,19 @@ async function loadPortfolioRealizedSummary(
                       }
                     />
 
-                    <input
+                    <select
                       className="rounded bg-slate-900 p-3"
-                      placeholder="Broker"
                       value={transactionForm.broker}
                       onChange={(e) =>
                         updateTransactionForm(etf.id, "broker", e.target.value)
                       }
-                    />
+                    >
+                      {brokers.map((broker) => (
+                        <option key={broker} value={broker}>
+                          {broker}
+                        </option>
+                      ))}
+                    </select>
 
                     <input
                       className="rounded bg-slate-900 p-3"
