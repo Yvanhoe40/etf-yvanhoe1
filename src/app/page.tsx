@@ -33,34 +33,59 @@ type Snapshot = {
   } | null;
 };
 
-type PositionSummary = {
+type Portfolio = {
+  id: string;
+  portfolio_name: string;
+  access_code: string;
+};
+
+type PortfolioPosition = {
+  portfolio_id: string;
   etf_id: string;
-  buy_price: number | null;
-  quantity: number | null;
-  buy_fees: number | null;
-  sell_fees: number | null;
-  link_1: string | null;
-  link_2: string | null;
-  is_currently_held: boolean | null;
+  quantity_held: number | null;
+  average_price: number | null;
+  net_invested_amount: number | null;
+  current_price: number | null;
+  current_value: number | null;
+  unrealized_gain: number | null;
+};
+
+type PortfolioSummary = {
+  portfolio_id: string;
   invested_amount: number | null;
   current_value: number | null;
   unrealized_gain: number | null;
-  unrealized_gain_percent: number | null;
+  performance_percent: number | null;
+  positions_count?: number | null;
+};
+
+type Transaction = {
+  id: string;
+  portfolio_id: string;
+  etf_id: string;
+  transaction_type: "BUY" | "SELL";
+  transaction_date: string;
+  quantity: number;
+  price: number;
+  fees: number | null;
+  broker: string | null;
+  note: string | null;
 };
 
 type EtfWithSnapshot = Etf & {
   snapshot?: Snapshot | null;
-  position?: PositionSummary | null;
+  portfolioPosition?: PortfolioPosition | null;
+  transactions?: Transaction[];
 };
 
-type PositionForm = {
-  buy_price: string;
+type TransactionForm = {
+  transaction_type: "BUY" | "SELL";
+  transaction_date: string;
   quantity: string;
-  buy_fees: string;
-  sell_fees: string;
-  link_1: string;
-  link_2: string;
-  is_currently_held: boolean;
+  price: string;
+  fees: string;
+  broker: string;
+  note: string;
 };
 
 const regions = ["World", "US", "Europe", "EM", "Commodities", "Sectors"];
@@ -79,11 +104,21 @@ const regionStyle: Record<string, string> = {
 export default function Home() {
   const [etfs, setEtfs] = useState<EtfWithSnapshot[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [adminCode, setAdminCode] = useState("");
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [positionForms, setPositionForms] = useState<Record<string, PositionForm>>({});
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
 
-  const canEdit = adminCode === "topaz";
+  const [adminCode, setAdminCode] = useState("");
+  const [portfolioCode, setPortfolioCode] = useState("");
+  const [activePortfolio, setActivePortfolio] = useState<Portfolio | null>(null);
+  const [portfolioSummary, setPortfolioSummary] =
+  useState<PortfolioSummary | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const [transactionForms, setTransactionForms] = useState<
+    Record<string, TransactionForm>
+  >({});
+
+  const canEditEtfs = adminCode === "topaz";
+  const canEditPortfolio = !!activePortfolio;
 
   const [isin, setIsin] = useState("");
   const [ticker, setTicker] = useState("");
@@ -92,6 +127,22 @@ export default function Home() {
   const [currency, setCurrency] = useState("EUR");
   const [region, setRegion] = useState("World");
   const [topic, setTopic] = useState("");
+
+  function today() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function emptyTransactionForm(): TransactionForm {
+    return {
+      transaction_type: "BUY",
+      transaction_date: today(),
+      quantity: "",
+      price: "",
+      fees: "",
+      broker: "",
+      note: "",
+    };
+  }
 
   function formatNumber(value: number | null | undefined, digits = 2) {
     if (value === null || value === undefined) return "-";
@@ -103,7 +154,18 @@ export default function Home() {
 
   function formatDate(value: string | null | undefined) {
     if (!value) return "-";
+    return new Date(value).toLocaleDateString("fr-BE");
+  }
+
+  function formatDateTime(value: string | null | undefined) {
+    if (!value) return "-";
     return new Date(value).toLocaleString("fr-BE");
+  }
+
+  function toNumber(value: string) {
+    if (!value) return null;
+    const parsed = Number(value.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : null;
   }
 
   function distanceToHigh(price?: number | null, high?: number | null) {
@@ -125,35 +187,68 @@ export default function Home() {
     return ((price - low) / (high - low)) * 100;
   }
 
-  function toNumber(value: string) {
-    if (!value) return null;
-    const parsed = Number(value.replace(",", "."));
-    return Number.isFinite(parsed) ? parsed : null;
+async function loadPortfolioSummary(portfolioId: string | null) {
+  if (!portfolioId) {
+    setPortfolioSummary(null);
+    return;
   }
 
-  async function loadEtfs() {
+  const { data } = await supabase
+    .from("portfolio_summary")
+    .select("*")
+    .eq("portfolio_id", portfolioId)
+    .maybeSingle();
+
+  setPortfolioSummary(data || null);
+}
+
+  async function loadEtfs(portfolioId?: string | null) {
     const { data: etfData } = await supabase.from("etfs").select("*");
 
     const { data: snapshotData } = await supabase
       .from("latest_etf_market_snapshots")
       .select("*");
 
-    const { data: positionData } = await supabase
-      .from("etf_position_summary")
-      .select("*");
+    let positionData: PortfolioPosition[] = [];
+    let transactionData: Transaction[] = [];
+
+    if (portfolioId) {
+      const { data: positions } = await supabase
+        .from("etf_portfolio_positions")
+        .select("*")
+        .eq("portfolio_id", portfolioId);
+
+      const { data: transactions } = await supabase
+        .from("etf_transactions")
+        .select("*")
+        .eq("portfolio_id", portfolioId)
+        .order("transaction_date", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      positionData = positions || [];
+      transactionData = transactions || [];
+    }
 
     const snapshotsByEtfId = new Map(
       (snapshotData || []).map((snapshot) => [snapshot.etf_id, snapshot])
     );
 
     const positionsByEtfId = new Map(
-      (positionData || []).map((position) => [position.etf_id, position])
+      positionData.map((position) => [position.etf_id, position])
     );
+
+    const transactionsByEtfId = new Map<string, Transaction[]>();
+
+    transactionData.forEach((transaction) => {
+      const existing = transactionsByEtfId.get(transaction.etf_id) || [];
+      transactionsByEtfId.set(transaction.etf_id, [...existing, transaction]);
+    });
 
     const merged = (etfData || []).map((etf) => ({
       ...etf,
       snapshot: snapshotsByEtfId.get(etf.id) || null,
-      position: positionsByEtfId.get(etf.id) || null,
+      portfolioPosition: positionsByEtfId.get(etf.id) || null,
+      transactions: transactionsByEtfId.get(etf.id) || [],
     }));
 
     const sorted = merged.sort((a, b) => {
@@ -162,28 +257,44 @@ export default function Home() {
       return a.ticker.localeCompare(b.ticker);
     });
 
-    const forms: Record<string, PositionForm> = {};
-
+    const forms: Record<string, TransactionForm> = {};
     sorted.forEach((etf) => {
-      const position = etf.position;
-
-      forms[etf.id] = {
-        buy_price: position?.buy_price?.toString() || "",
-        quantity: position?.quantity?.toString() || "",
-        buy_fees: position?.buy_fees?.toString() || "",
-        sell_fees: position?.sell_fees?.toString() || "",
-        link_1: position?.link_1 || "",
-        link_2: position?.link_2 || "",
-        is_currently_held: position?.is_currently_held || false,
-      };
+      forms[etf.id] = emptyTransactionForm();
     });
 
     setEtfs(sorted);
-    setPositionForms(forms);
+    setTransactionForms(forms);
+  }
+
+  async function connectPortfolio() {
+    if (!portfolioCode) return alert("Entre un code portefeuille.");
+
+    const { data, error } = await supabase
+      .from("etf_portfolios")
+      .select("*")
+      .eq("access_code", portfolioCode)
+      .single();
+
+    if (error || !data) {
+      alert("Code portefeuille inconnu.");
+      return;
+    }
+
+    setActivePortfolio(data);
+    await loadEtfs(data.id);
+    await loadPortfolioSummary(data.id);
+  }
+
+  async function disconnectPortfolio() {
+    setActivePortfolio(null);
+    setPortfolioCode("");
+    setEditingTransactionId(null);
+    setPortfolioSummary(null);
+    await loadEtfs(null);
   }
 
   async function refreshMarketData() {
-    if (!canEdit) return;
+    if (!canEditEtfs) return;
 
     setIsRefreshing(true);
 
@@ -201,7 +312,7 @@ export default function Home() {
         `Collecte terminée : ${result.successful}/${result.totalEtfs} ETF mis à jour`
       );
 
-      await loadEtfs();
+      await loadEtfs(activePortfolio?.id || null);
     } catch (error) {
       console.error(error);
       alert("Erreur technique pendant le rafraîchissement.");
@@ -210,12 +321,12 @@ export default function Home() {
     }
   }
 
-  function updatePositionForm(
+  function updateTransactionForm(
     etfId: string,
-    field: keyof PositionForm,
-    value: string | boolean
+    field: keyof TransactionForm,
+    value: string
   ) {
-    setPositionForms((current) => ({
+    setTransactionForms((current) => ({
       ...current,
       [etfId]: {
         ...current[etfId],
@@ -224,33 +335,95 @@ export default function Home() {
     }));
   }
 
-  async function savePosition(etfId: string) {
-    if (!canEdit) return alert("Mode lecture seule.");
+  function editTransaction(transaction: Transaction) {
+    setEditingTransactionId(transaction.id);
 
-    const form = positionForms[etfId];
+    setTransactionForms((current) => ({
+      ...current,
+      [transaction.etf_id]: {
+        transaction_type: transaction.transaction_type,
+        transaction_date: transaction.transaction_date,
+        quantity: transaction.quantity?.toString() || "",
+        price: transaction.price?.toString() || "",
+        fees: transaction.fees?.toString() || "",
+        broker: transaction.broker || "",
+        note: transaction.note || "",
+      },
+    }));
+  }
 
+  function cancelEditTransaction(etfId: string) {
+    setEditingTransactionId(null);
+
+    setTransactionForms((current) => ({
+      ...current,
+      [etfId]: emptyTransactionForm(),
+    }));
+  }
+
+  async function saveTransaction(etfId: string) {
+    if (!activePortfolio) return alert("Connecte d'abord un portefeuille.");
+
+    const form = transactionForms[etfId];
     if (!form) return;
 
-    const { error } = await supabase.from("etf_positions").upsert(
-      {
-        etf_id: etfId,
-        buy_price: toNumber(form.buy_price),
-        quantity: toNumber(form.quantity),
-        buy_fees: toNumber(form.buy_fees) || 0,
-        sell_fees: toNumber(form.sell_fees) || 0,
-        link_1: form.link_1 || null,
-        link_2: form.link_2 || null,
-        is_currently_held: form.is_currently_held,
-      },
-      {
-        onConflict: "etf_id",
-      }
-    );
+    const quantity = toNumber(form.quantity);
+    const price = toNumber(form.price);
+    const fees = toNumber(form.fees) || 0;
+
+    if (!quantity || !price) {
+      alert("Quantité et prix sont obligatoires.");
+      return;
+    }
+
+    const payload = {
+      portfolio_id: activePortfolio.id,
+      etf_id: etfId,
+      transaction_type: form.transaction_type,
+      transaction_date: form.transaction_date,
+      quantity,
+      price,
+      fees,
+      broker: form.broker || null,
+      note: form.note || null,
+    };
+
+    const { error } = editingTransactionId
+      ? await supabase
+          .from("etf_transactions")
+          .update(payload)
+          .eq("id", editingTransactionId)
+      : await supabase.from("etf_transactions").insert(payload);
 
     if (error) return alert(error.message);
 
-    alert("Position sauvegardée.");
-    await loadEtfs();
+    alert(editingTransactionId ? "Transaction modifiée." : "Transaction ajoutée.");
+
+    setEditingTransactionId(null);
+
+    setTransactionForms((current) => ({
+      ...current,
+      [etfId]: emptyTransactionForm(),
+    }));
+
+    await loadEtfs(activePortfolio.id);
+    await loadPortfolioSummary(activePortfolio.id);
+  }
+
+  async function deleteTransaction(transactionId: string) {
+    if (!activePortfolio) return;
+    if (!confirm("Supprimer cette transaction ?")) return;
+
+    const { error } = await supabase
+      .from("etf_transactions")
+      .delete()
+      .eq("id", transactionId);
+
+    if (error) return alert(error.message);
+
+    alert("Transaction supprimée.");
+    await loadEtfs(activePortfolio.id);
+    await loadPortfolioSummary(activePortfolio.id);
   }
 
   function resetForm() {
@@ -265,7 +438,7 @@ export default function Home() {
   }
 
   async function saveEtf() {
-    if (!canEdit) return alert("Mode lecture seule.");
+    if (!canEditEtfs) return alert("Mode lecture seule.");
     if (!isin || !ticker || !name) return;
 
     const payload = {
@@ -286,11 +459,11 @@ export default function Home() {
     if (error) return alert(error.message);
 
     resetForm();
-    loadEtfs();
+    await loadEtfs(activePortfolio?.id || null);
   }
 
   function editEtf(etf: Etf) {
-    if (!canEdit) return;
+    if (!canEditEtfs) return;
 
     setEditingId(etf.id);
     setIsin(etf.isin);
@@ -303,57 +476,173 @@ export default function Home() {
   }
 
   async function deleteEtf(id: string) {
-    if (!canEdit) return alert("Mode lecture seule.");
+    if (!canEditEtfs) return alert("Mode lecture seule.");
     if (!confirm("Confirmer la suppression de cet ETF ?")) return;
 
     const { error } = await supabase.from("etfs").delete().eq("id", id);
     if (error) return alert(error.message);
 
-    loadEtfs();
+    await loadEtfs(activePortfolio?.id || null);
   }
 
   useEffect(() => {
-    loadEtfs();
+    loadEtfs(null);
   }, []);
-  return (
+    return (
     <main className="min-h-screen bg-slate-950 text-white p-10">
       <h1 className="text-4xl font-bold mb-2">ETF Dashboard</h1>
       <p className="text-slate-400 mb-8">
-        Gestion de ta liste d’ETF, données Yahoo Finance et positions personnelles.
+        Référentiel ETF, données Yahoo Finance et portefeuilles personnels.
       </p>
 
-      <div className="mb-8 rounded-xl border border-slate-700 bg-slate-900 p-4">
-        <label className="block text-sm text-slate-400 mb-2">
-          Code administrateur
-        </label>
-        <input
-          type="password"
-          className="rounded bg-slate-800 p-3 w-full"
-          placeholder="Entrer le code"
-          value={adminCode}
-          onChange={(e) => setAdminCode(e.target.value)}
-        />
+      <div className="mb-8 grid gap-4 md:grid-cols-2">
+        <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+          <label className="block text-sm text-slate-400 mb-2">
+            Code administrateur ETF
+          </label>
+          <input
+            type="password"
+            className="rounded bg-slate-800 p-3 w-full"
+            placeholder="Code admin"
+            value={adminCode}
+            onChange={(e) => setAdminCode(e.target.value)}
+          />
+          <p className="mt-2 text-sm text-slate-500">
+            {canEditEtfs
+              ? "Mode admin activé"
+              : "Mode lecture seule pour la liste ETF"}
+          </p>
 
-        <p className="mt-2 text-sm text-slate-500">
-          {canEdit
-            ? "Mode édition activé"
-            : "Mode lecture seule : ajout, modification et suppression désactivés"}
-        </p>
+          {canEditEtfs && (
+            <button
+              onClick={refreshMarketData}
+              disabled={isRefreshing}
+              className="mt-4 rounded bg-emerald-600 px-5 py-3 font-semibold hover:bg-emerald-500 disabled:opacity-50"
+            >
+              {isRefreshing
+                ? "Rafraîchissement en cours..."
+                : "Rafraîchir les données Yahoo Finance"}
+            </button>
+          )}
+        </div>
 
-        {canEdit && (
-          <button
-            onClick={refreshMarketData}
-            disabled={isRefreshing}
-            className="mt-4 rounded bg-emerald-600 px-5 py-3 font-semibold hover:bg-emerald-500 disabled:opacity-50"
-          >
-            {isRefreshing
-              ? "Rafraîchissement en cours..."
-              : "Rafraîchir les données Yahoo Finance"}
-          </button>
-        )}
+        <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+          <label className="block text-sm text-slate-400 mb-2">
+            Code portefeuille
+          </label>
+
+          {!activePortfolio ? (
+            <div className="flex gap-3">
+              <input
+                type="password"
+                className="rounded bg-slate-800 p-3 w-full"
+                placeholder="Ex: michel"
+                value={portfolioCode}
+                onChange={(e) => setPortfolioCode(e.target.value)}
+              />
+              <button
+                onClick={connectPortfolio}
+                className="rounded bg-indigo-600 px-5 py-3 font-semibold hover:bg-indigo-500"
+              >
+                Ouvrir
+              </button>
+            </div>
+          ) : (
+            <div>
+              <p className="text-green-400 font-semibold">
+                Portefeuille actif : {activePortfolio.portfolio_name}
+              </p>
+              <button
+                onClick={disconnectPortfolio}
+                className="mt-4 rounded bg-slate-700 px-5 py-3 font-semibold hover:bg-slate-600"
+              >
+                Fermer le portefeuille
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+                {activePortfolio && portfolioSummary && (
+        <div className="mb-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-semibold">
+                Dashboard investisseur : {activePortfolio.portfolio_name}
+              </h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Vue consolidée des positions ouvertes calculées en FIFO.
+              </p>
+            </div>
 
-      {canEdit && (
+            <div
+              className={`rounded-lg px-4 py-2 text-sm font-semibold ${
+                (portfolioSummary.unrealized_gain || 0) >= 0
+                  ? "bg-green-500/10 text-green-400"
+                  : "bg-red-500/10 text-red-400"
+              }`}
+            >
+              {(portfolioSummary.unrealized_gain || 0) >= 0
+                ? "Portefeuille en gain"
+                : "Portefeuille en perte"}
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-5">
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">Valeur totale</p>
+              <p className="text-2xl font-bold">
+                {formatNumber(portfolioSummary.current_value)} EUR
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">Capital investi</p>
+              <p className="text-2xl font-bold">
+                {formatNumber(portfolioSummary.invested_amount)} EUR
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">Gain latent</p>
+              <p
+                className={`text-2xl font-bold ${
+                  (portfolioSummary.unrealized_gain || 0) >= 0
+                    ? "text-green-400"
+                    : "text-red-400"
+                }`}
+              >
+                {formatNumber(portfolioSummary.unrealized_gain)} EUR
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">Performance</p>
+              <p
+                className={`text-2xl font-bold ${
+                  (portfolioSummary.performance_percent || 0) >= 0
+                    ? "text-green-400"
+                    : "text-red-400"
+                }`}
+              >
+                {formatNumber(portfolioSummary.performance_percent)} %
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">ETF détenus</p>
+              <p className="text-2xl font-bold">
+                {
+                  etfs.filter(
+                    (etf) => (etf.portfolioPosition?.quantity_held || 0) > 0
+                  ).length
+                }
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {canEditEtfs && (
         <div className="mb-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
           <h2 className="text-2xl font-semibold mb-4">
             {editingId ? "Modifier un ETF" : "Ajouter un ETF"}
@@ -396,17 +685,25 @@ export default function Home() {
       <div className="grid gap-4">
         {etfs.map((etf) => {
           const snapshot = etf.snapshot;
-          const position = etf.position;
-          const positionForm = positionForms[etf.id];
+          const position = etf.portfolioPosition;
+          const transactions = etf.transactions || [];
+          const transactionForm = transactionForms[etf.id];
 
           const isPositive = (snapshot?.day_change_percent || 0) >= 0;
-          const isGainPositive = (position?.unrealized_gain_percent || 0) >= 0;
+          const isGainPositive = (position?.unrealized_gain || 0) >= 0;
 
           const high52 = snapshot?.raw_quote?.meta?.fiftyTwoWeekHigh ?? null;
           const low52 = snapshot?.raw_quote?.meta?.fiftyTwoWeekLow ?? null;
           const distanceHigh = distanceToHigh(snapshot?.price, high52);
           const distanceLow = distanceToLow(snapshot?.price, low52);
           const position52w = position52Weeks(snapshot?.price, high52, low52);
+
+          const gainPercent =
+            position?.unrealized_gain !== null &&
+            position?.unrealized_gain !== undefined &&
+            position?.net_invested_amount
+              ? (position.unrealized_gain / position.net_invested_amount) * 100
+              : null;
 
           return (
             <div
@@ -426,7 +723,7 @@ export default function Home() {
                   <p className="text-slate-500">Topic : {etf.topic || "-"}</p>
                 </div>
 
-                {canEdit && (
+                {canEditEtfs && (
                   <div className="flex gap-2">
                     <button onClick={() => editEtf(etf)} className="rounded bg-amber-600 px-4 py-2 font-semibold hover:bg-amber-500">
                       Modifier
@@ -462,88 +759,47 @@ export default function Home() {
 
                 <div>
                   <p className="text-xs text-slate-400">Volume</p>
-                  <p className="text-lg font-semibold">
-                    {formatNumber(snapshot?.volume, 0)}
-                  </p>
+                  <p className="text-lg font-semibold">{formatNumber(snapshot?.volume, 0)}</p>
                 </div>
 
                 <div>
                   <p className="text-xs text-slate-400">Dernière collecte</p>
-                  <p className="text-sm font-semibold">
-                    {formatDate(snapshot?.snapshot_at)}
-                  </p>
+                  <p className="text-sm font-semibold">{formatDateTime(snapshot?.snapshot_at)}</p>
                 </div>
               </div>
 
               <div className="mt-3 grid gap-3 md:grid-cols-10 rounded-lg bg-slate-800 p-4">
-                <div>
-                  <p className="text-xs text-slate-400">Open</p>
-                  <p className="font-semibold">{formatNumber(snapshot?.open_price)}</p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-slate-400">High</p>
-                  <p className="font-semibold">{formatNumber(snapshot?.high_price)}</p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-slate-400">Low</p>
-                  <p className="font-semibold">{formatNumber(snapshot?.low_price)}</p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-slate-400">Close J-1</p>
-                  <p className="font-semibold">{formatNumber(snapshot?.previous_close)}</p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-slate-400">52W High</p>
-                  <p className="font-semibold">{formatNumber(high52)}</p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-slate-400">52W Low</p>
-                  <p className="font-semibold">{formatNumber(low52)}</p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-slate-400">Écart 52W High</p>
-                  <p className="font-semibold">{formatNumber(distanceHigh)} %</p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-slate-400">Écart 52W Low</p>
-                  <p className="font-semibold text-emerald-400">{formatNumber(distanceLow)} %</p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-slate-400">Position 52W</p>
-                  <p className="font-semibold">{formatNumber(position52w)} %</p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-slate-400">Source</p>
-                  <p className="font-semibold">Yahoo</p>
-                </div>
+                <div><p className="text-xs text-slate-400">Open</p><p className="font-semibold">{formatNumber(snapshot?.open_price)}</p></div>
+                <div><p className="text-xs text-slate-400">High</p><p className="font-semibold">{formatNumber(snapshot?.high_price)}</p></div>
+                <div><p className="text-xs text-slate-400">Low</p><p className="font-semibold">{formatNumber(snapshot?.low_price)}</p></div>
+                <div><p className="text-xs text-slate-400">Close J-1</p><p className="font-semibold">{formatNumber(snapshot?.previous_close)}</p></div>
+                <div><p className="text-xs text-slate-400">52W High</p><p className="font-semibold">{formatNumber(high52)}</p></div>
+                <div><p className="text-xs text-slate-400">52W Low</p><p className="font-semibold">{formatNumber(low52)}</p></div>
+                <div><p className="text-xs text-slate-400">Écart 52W High</p><p className="font-semibold">{formatNumber(distanceHigh)} %</p></div>
+                <div><p className="text-xs text-slate-400">Écart 52W Low</p><p className="font-semibold text-emerald-400">{formatNumber(distanceLow)} %</p></div>
+                <div><p className="text-xs text-slate-400">Position 52W</p><p className="font-semibold">{formatNumber(position52w)} %</p></div>
+                <div><p className="text-xs text-slate-400">Source</p><p className="font-semibold">Yahoo</p></div>
               </div>
 
               <div className="mt-3 rounded-lg bg-slate-800 p-4">
-                <h3 className="mb-3 text-lg font-semibold">Position personnelle</h3>
+                <h3 className="mb-3 text-lg font-semibold">
+                  Portefeuille {activePortfolio ? `: ${activePortfolio.portfolio_name}` : ""}
+                </h3>
 
                 <div className="grid gap-3 md:grid-cols-6">
                   <div>
-                    <p className="text-xs text-slate-400">Quantité</p>
-                    <p className="font-semibold">{formatNumber(position?.quantity, 4)}</p>
+                    <p className="text-xs text-slate-400">Quantité détenue</p>
+                    <p className="font-semibold">{formatNumber(position?.quantity_held, 4)}</p>
                   </div>
 
                   <div>
-                    <p className="text-xs text-slate-400">Prix achat</p>
-                    <p className="font-semibold">{formatNumber(position?.buy_price)} {etf.currency || "EUR"}</p>
+                    <p className="text-xs text-slate-400">PRU moyen</p>
+                    <p className="font-semibold">{formatNumber(position?.average_price)} {etf.currency || "EUR"}</p>
                   </div>
 
                   <div>
-                    <p className="text-xs text-slate-400">Montant investi</p>
-                    <p className="font-semibold">{formatNumber(position?.invested_amount)} {etf.currency || "EUR"}</p>
+                    <p className="text-xs text-slate-400">Investi net</p>
+                    <p className="font-semibold">{formatNumber(position?.net_invested_amount)} {etf.currency || "EUR"}</p>
                   </div>
 
                   <div>
@@ -561,86 +817,160 @@ export default function Home() {
                   <div>
                     <p className="text-xs text-slate-400">Gain %</p>
                     <p className={`font-semibold ${isGainPositive ? "text-green-400" : "text-red-400"}`}>
-                      {formatNumber(position?.unrealized_gain_percent)} %
+                      {formatNumber(gainPercent)} %
                     </p>
                   </div>
                 </div>
 
-                {canEdit && positionForm && (
+                {canEditPortfolio && transactionForm && (
                   <div className="mt-4 grid gap-3 md:grid-cols-4">
+                    <select
+                      className="rounded bg-slate-900 p-3"
+                      value={transactionForm.transaction_type}
+                      onChange={(e) =>
+                        updateTransactionForm(etf.id, "transaction_type", e.target.value)
+                      }
+                    >
+                      <option value="BUY">Achat</option>
+                      <option value="SELL">Vente</option>
+                    </select>
+
+                    <input
+                      type="date"
+                      className="rounded bg-slate-900 p-3"
+                      value={transactionForm.transaction_date}
+                      onChange={(e) =>
+                        updateTransactionForm(etf.id, "transaction_date", e.target.value)
+                      }
+                    />
+
                     <input
                       className="rounded bg-slate-900 p-3"
                       placeholder="Quantité"
-                      value={positionForm.quantity}
-                      onChange={(e) => updatePositionForm(etf.id, "quantity", e.target.value)}
+                      value={transactionForm.quantity}
+                      onChange={(e) =>
+                        updateTransactionForm(etf.id, "quantity", e.target.value)
+                      }
                     />
 
                     <input
                       className="rounded bg-slate-900 p-3"
-                      placeholder="Prix achat"
-                      value={positionForm.buy_price}
-                      onChange={(e) => updatePositionForm(etf.id, "buy_price", e.target.value)}
+                      placeholder="Prix"
+                      value={transactionForm.price}
+                      onChange={(e) =>
+                        updateTransactionForm(etf.id, "price", e.target.value)
+                      }
                     />
 
                     <input
                       className="rounded bg-slate-900 p-3"
-                      placeholder="Frais achat"
-                      value={positionForm.buy_fees}
-                      onChange={(e) => updatePositionForm(etf.id, "buy_fees", e.target.value)}
+                      placeholder="Frais"
+                      value={transactionForm.fees}
+                      onChange={(e) =>
+                        updateTransactionForm(etf.id, "fees", e.target.value)
+                      }
                     />
 
                     <input
                       className="rounded bg-slate-900 p-3"
-                      placeholder="Frais vente"
-                      value={positionForm.sell_fees}
-                      onChange={(e) => updatePositionForm(etf.id, "sell_fees", e.target.value)}
+                      placeholder="Broker"
+                      value={transactionForm.broker}
+                      onChange={(e) =>
+                        updateTransactionForm(etf.id, "broker", e.target.value)
+                      }
                     />
 
                     <input
                       className="rounded bg-slate-900 p-3"
-                      placeholder="Lien 1"
-                      value={positionForm.link_1}
-                      onChange={(e) => updatePositionForm(etf.id, "link_1", e.target.value)}
+                      placeholder="Note"
+                      value={transactionForm.note}
+                      onChange={(e) =>
+                        updateTransactionForm(etf.id, "note", e.target.value)
+                      }
                     />
 
-                    <input
-                      className="rounded bg-slate-900 p-3"
-                      placeholder="Lien 2"
-                      value={positionForm.link_2}
-                      onChange={(e) => updatePositionForm(etf.id, "link_2", e.target.value)}
-                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => saveTransaction(etf.id)}
+                        className="flex-1 rounded bg-indigo-600 px-5 py-3 font-semibold hover:bg-indigo-500"
+                      >
+                        {editingTransactionId ? "Modifier transaction" : "Ajouter transaction"}
+                      </button>
 
-                    <label className="flex items-center gap-2 rounded bg-slate-900 p-3">
-                      <input
-                        type="checkbox"
-                        checked={positionForm.is_currently_held}
-                        onChange={(e) =>
-                          updatePositionForm(etf.id, "is_currently_held", e.target.checked)
-                        }
-                      />
-                      ETF détenu actuellement
-                    </label>
-
-                    <button
-                      onClick={() => savePosition(etf.id)}
-                      className="rounded bg-indigo-600 px-5 py-3 font-semibold hover:bg-indigo-500"
-                    >
-                      Sauvegarder position
-                    </button>
+                      {editingTransactionId && (
+                        <button
+                          onClick={() => cancelEditTransaction(etf.id)}
+                          className="rounded bg-slate-700 px-4 py-3 font-semibold hover:bg-slate-600"
+                        >
+                          Annuler
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
-                {(position?.link_1 || position?.link_2) && (
-                  <div className="mt-3 flex gap-4 text-sm">
-                    {position.link_1 && (
-                      <a href={position.link_1} target="_blank" className="text-blue-400 underline">
-                        Lien 1
-                      </a>
-                    )}
-                    {position.link_2 && (
-                      <a href={position.link_2} target="_blank" className="text-blue-400 underline">
-                        Lien 2
-                      </a>
+                {!activePortfolio && (
+                  <p className="mt-3 text-sm text-slate-500">
+                    Ouvre un portefeuille pour encoder des achats ou ventes.
+                  </p>
+                )}
+
+                {activePortfolio && (
+                  <div className="mt-5">
+                    <h4 className="mb-2 font-semibold">Historique des transactions</h4>
+
+                    {transactions.length === 0 ? (
+                      <p className="text-sm text-slate-500">
+                        Aucune transaction encodée pour cet ETF.
+                      </p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                          <thead className="text-slate-400">
+                            <tr>
+                              <th className="py-2">Date</th>
+                              <th>Type</th>
+                              <th>Quantité</th>
+                              <th>Prix</th>
+                              <th>Frais</th>
+                              <th>Broker</th>
+                              <th>Note</th>
+                              <th className="text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {transactions.map((transaction) => (
+                              <tr key={transaction.id} className="border-t border-slate-700">
+                                <td className="py-2">{formatDate(transaction.transaction_date)}</td>
+                                <td>
+                                  <span className={transaction.transaction_type === "BUY" ? "text-green-400" : "text-red-400"}>
+                                    {transaction.transaction_type === "BUY" ? "Achat" : "Vente"}
+                                  </span>
+                                </td>
+                                <td>{formatNumber(transaction.quantity, 4)}</td>
+                                <td>{formatNumber(transaction.price)} {etf.currency || "EUR"}</td>
+                                <td>{formatNumber(transaction.fees)} {etf.currency || "EUR"}</td>
+                                <td>{transaction.broker || "-"}</td>
+                                <td>{transaction.note || "-"}</td>
+                                <td className="text-right">
+                                  <button
+                                    onClick={() => editTransaction(transaction)}
+                                    className="mr-2 rounded bg-amber-600 px-3 py-1 font-semibold hover:bg-amber-500"
+                                  >
+                                    Modifier
+                                  </button>
+                                  <button
+                                    onClick={() => deleteTransaction(transaction.id)}
+                                    className="rounded bg-red-700 px-3 py-1 font-semibold hover:bg-red-600"
+                                  >
+                                    Supprimer
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     )}
                   </div>
                 )}
