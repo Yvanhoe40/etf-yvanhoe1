@@ -901,6 +901,15 @@ async function loadPortfolioRealizedSummary(
           const isPositive = (snapshot?.day_change_percent || 0) >= 0;
           const isGainPositive = (position?.unrealized_gain || 0) >= 0;
 
+          const dayPositionGain =
+            position?.quantity_held && snapshot?.day_change
+              ? position.quantity_held * snapshot.day_change
+              : null;
+
+          const dayPositionGainPercent = snapshot?.day_change_percent ?? null;
+
+          const isDayPositionGainPositive = (dayPositionGain || 0) >= 0;          
+
           const high52 = snapshot?.raw_quote?.meta?.fiftyTwoWeekHigh ?? null;
           const low52 = snapshot?.raw_quote?.meta?.fiftyTwoWeekLow ?? null;
           const distanceHigh = distanceToHigh(snapshot?.price, high52);
@@ -995,7 +1004,7 @@ async function loadPortfolioRealizedSummary(
                   Portefeuille {activePortfolio ? `: ${activePortfolio.portfolio_name}` : ""}
                 </h3>
 
-                <div className="grid gap-3 md:grid-cols-6">
+                <div className="grid gap-3 md:grid-cols-8">
                   <div>
                     <p className="text-xs text-slate-400">Quantité détenue</p>
                     <p className="font-semibold">{formatNumber(position?.quantity_held, 4)}</p>
@@ -1014,6 +1023,28 @@ async function loadPortfolioRealizedSummary(
                   <div>
                     <p className="text-xs text-slate-400">Valeur actuelle</p>
                     <p className="font-semibold">{formatNumber(position?.current_value)} {etf.currency || "EUR"}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-slate-400">Gain jour</p>
+                    <p
+                      className={`font-semibold ${
+                        isDayPositionGainPositive ? "text-green-400" : "text-red-400"
+                      }`}
+                    >
+                      {formatNumber(dayPositionGain)} {etf.currency || "EUR"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-slate-400">Gain jour %</p>
+                    <p
+                      className={`font-semibold ${
+                        isDayPositionGainPositive ? "text-green-400" : "text-red-400"
+                      }`}
+                    >
+                      {formatNumber(dayPositionGainPercent)} %
+                    </p>
                   </div>
 
                   <div>
