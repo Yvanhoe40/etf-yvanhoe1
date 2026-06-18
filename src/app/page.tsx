@@ -61,11 +61,23 @@ type PortfolioSummary = {
 
 type PortfolioRealizedSummary = {
   portfolio_id: string;
+
   etfs_with_sales: number | null;
   sell_transactions: number | null;
+
   realized_gain: number | null;
   realized_profit: number | null;
   realized_loss: number | null;
+
+  winning_trades: number | null;
+  losing_trades: number | null;
+  win_rate: number | null;
+
+  best_trade_ticker: string | null;
+  best_trade_gain: number | null;
+
+  worst_trade_ticker: string | null;
+  worst_trade_gain: number | null;
 };
 
 type Transaction = {
@@ -677,7 +689,7 @@ async function loadPortfolioRealizedSummary(
             Historique global
           </h2>
 
-          <div className="grid gap-3 md:grid-cols-5">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4 xl:grid-cols-8">
             <div className="rounded-lg bg-slate-800 p-4">
               <p className="text-xs text-slate-400">Gain réalisé</p>
               <p
@@ -726,8 +738,37 @@ async function loadPortfolioRealizedSummary(
                 {portfolioRealizedSummary.sell_transactions}
               </p>
             </div>
-          </div>
+          
+            
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">
+                Trades gagnants
+              </p>
+              <p className="text-xl font-bold text-green-400">
+                {portfolioRealizedSummary.winning_trades}
+              </p>
+            </div>
 
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">
+                Trades perdants
+              </p>
+              <p className="text-xl font-bold text-red-400">
+                {portfolioRealizedSummary.losing_trades}
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">
+                Taux de réussite
+              </p>
+              <p className="text-xl font-bold">
+                {formatNumber(
+                portfolioRealizedSummary.win_rate
+                )} %
+              </p>
+          </div>
+        </div>
           <div className="mt-4 rounded-lg bg-slate-800 p-4">
             <p className="text-sm text-slate-400">
               Résultat global (latent + réalisé)
@@ -748,6 +789,39 @@ async function loadPortfolioRealizedSummary(
               EUR
             </p>
           </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-lg bg-slate-800 p-4">
+            <p className="text-sm text-slate-400">
+              Meilleur trade
+            </p>
+
+            <p className="mt-2 text-lg font-bold text-green-400">
+              {portfolioRealizedSummary.best_trade_ticker}
+            </p>
+
+            <p className="text-2xl font-bold text-green-400">
+              {formatNumber(
+                portfolioRealizedSummary.best_trade_gain
+              )} EUR
+            </p>
+          </div>
+
+          <div className="rounded-lg bg-slate-800 p-4">
+            <p className="text-sm text-slate-400">
+              Pire trade
+            </p>
+
+            <p className="mt-2 text-lg font-bold text-red-400">
+              {portfolioRealizedSummary.worst_trade_ticker}
+            </p>
+
+            <p className="text-2xl font-bold text-red-400">
+              {formatNumber(
+                portfolioRealizedSummary.worst_trade_gain
+              )} EUR
+            </p>
+          </div>
+        </div>
         </div>
       )}
       {canEditEtfs && (
