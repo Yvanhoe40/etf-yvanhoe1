@@ -59,6 +59,15 @@ type PortfolioSummary = {
   positions_count?: number | null;
 };
 
+type PortfolioRealizedSummary = {
+  portfolio_id: string;
+  etfs_with_sales: number | null;
+  sell_transactions: number | null;
+  realized_gain: number | null;
+  realized_profit: number | null;
+  realized_loss: number | null;
+};
+
 type Transaction = {
   id: string;
   portfolio_id: string;
@@ -111,6 +120,8 @@ export default function Home() {
   const [activePortfolio, setActivePortfolio] = useState<Portfolio | null>(null);
   const [portfolioSummary, setPortfolioSummary] =
   useState<PortfolioSummary | null>(null);
+  const [portfolioRealizedSummary, setPortfolioRealizedSummary] =
+  useState<PortfolioRealizedSummary | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [transactionForms, setTransactionForms] = useState<
@@ -202,6 +213,22 @@ async function loadPortfolioSummary(portfolioId: string | null) {
   setPortfolioSummary(data || null);
 }
 
+async function loadPortfolioRealizedSummary(
+  portfolioId: string | null
+) {
+  if (!portfolioId) {
+    setPortfolioRealizedSummary(null);
+    return;
+  }
+
+  const { data } = await supabase
+    .from("portfolio_realized_summary")
+    .select("*")
+    .eq("portfolio_id", portfolioId)
+    .maybeSingle();
+
+  setPortfolioRealizedSummary(data || null);
+}
   async function loadEtfs(portfolioId?: string | null) {
     const { data: etfData } = await supabase.from("etfs").select("*");
 
@@ -283,6 +310,7 @@ async function loadPortfolioSummary(portfolioId: string | null) {
     setActivePortfolio(data);
     await loadEtfs(data.id);
     await loadPortfolioSummary(data.id);
+    await loadPortfolioRealizedSummary(data.id);
   }
 
   async function disconnectPortfolio() {
@@ -290,6 +318,7 @@ async function loadPortfolioSummary(portfolioId: string | null) {
     setPortfolioCode("");
     setEditingTransactionId(null);
     setPortfolioSummary(null);
+    setPortfolioRealizedSummary(null);
     await loadEtfs(null);
   }
 
@@ -408,6 +437,7 @@ async function loadPortfolioSummary(portfolioId: string | null) {
 
     await loadEtfs(activePortfolio.id);
     await loadPortfolioSummary(activePortfolio.id);
+    await loadPortfolioRealizedSummary(activePortfolio.id);
   }
 
   async function deleteTransaction(transactionId: string) {
@@ -420,10 +450,10 @@ async function loadPortfolioSummary(portfolioId: string | null) {
       .eq("id", transactionId);
 
     if (error) return alert(error.message);
-
     alert("Transaction supprimée.");
     await loadEtfs(activePortfolio.id);
     await loadPortfolioSummary(activePortfolio.id);
+    await loadPortfolioRealizedSummary(activePortfolio.id);
   }
 
   function resetForm() {
@@ -641,7 +671,85 @@ async function loadPortfolioSummary(portfolioId: string | null) {
           </div>
         </div>
       )}
+            {activePortfolio && portfolioRealizedSummary && (
+        <div className="mb-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
+          <h2 className="mb-4 text-2xl font-semibold">
+            Historique global
+          </h2>
 
+          <div className="grid gap-3 md:grid-cols-5">
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">Gain réalisé</p>
+              <p
+                className={`text-xl font-bold ${
+                  (portfolioRealizedSummary.realized_gain || 0) >= 0
+                    ? "text-green-400"
+                    : "text-red-400"
+                }`}
+              >
+                {formatNumber(
+                  portfolioRealizedSummary.realized_gain
+                )} EUR
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">Profits réalisés</p>
+              <p className="text-xl font-bold text-green-400">
+                {formatNumber(
+                  portfolioRealizedSummary.realized_profit
+                )} EUR
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">Pertes réalisées</p>
+              <p className="text-xl font-bold text-red-400">
+                {formatNumber(
+                  portfolioRealizedSummary.realized_loss
+                )} EUR
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">ETF avec ventes</p>
+              <p className="text-xl font-bold">
+                {portfolioRealizedSummary.etfs_with_sales}
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">
+                Transactions de vente
+              </p>
+              <p className="text-xl font-bold">
+                {portfolioRealizedSummary.sell_transactions}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg bg-slate-800 p-4">
+            <p className="text-sm text-slate-400">
+              Résultat global (latent + réalisé)
+            </p>
+
+            <p
+              className={`mt-2 text-3xl font-bold ${
+                ((portfolioSummary?.unrealized_gain || 0) +
+                  (portfolioRealizedSummary.realized_gain || 0)) >= 0
+                  ? "text-green-400"
+                  : "text-red-400"
+              }`}
+            >
+              {formatNumber(
+                (portfolioSummary?.unrealized_gain || 0) +
+                  (portfolioRealizedSummary.realized_gain || 0)
+              )}{" "}
+              EUR
+            </p>
+          </div>
+        </div>
+      )}
       {canEditEtfs && (
         <div className="mb-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
           <h2 className="text-2xl font-semibold mb-4">
