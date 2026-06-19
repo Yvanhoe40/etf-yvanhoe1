@@ -188,6 +188,29 @@ export default function Home() {
     return new Date(value).toLocaleString("fr-BE");
   }
 
+  function buildAllocation(
+    positions: EtfWithSnapshot[],
+    groupBy: "region" | "topic",
+    totalValue: number
+  ) {
+    const allocation = new Map<string, number>();
+
+    positions.forEach((etf) => {
+      const key = groupBy === "region" ? etf.region || "Non classé" : etf.topic || "Non classé";
+      const value = etf.portfolioPosition?.current_value || 0;
+
+      allocation.set(key, (allocation.get(key) || 0) + value);
+    });
+
+    return Array.from(allocation.entries())
+      .map(([label, value]) => ({
+        label,
+        value,
+        weight: totalValue > 0 ? (value / totalValue) * 100 : 0,
+      }))
+      .sort((a, b) => b.value - a.value);
+  }
+
   function toNumber(value: string) {
     if (!value) return null;
     const parsed = Number(value.replace(",", "."));
@@ -533,6 +556,10 @@ async function loadPortfolioRealizedSummary(
   useEffect(() => {
     loadEtfs(null);
   }, []);
+
+  const openPositions = etfs.filter(
+  (etf) => (etf.portfolioPosition?.quantity_held || 0) > 0
+  );
     return (
     <main className="min-h-screen bg-slate-950 text-white p-10">
       <h1 className="text-4xl font-bold mb-2">ETF Dashboard</h1>
@@ -710,6 +737,120 @@ async function loadPortfolioRealizedSummary(
           </div>
         </div>
       )}
+
+            {activePortfolio && portfolioSummary && openPositions.length > 0 && (
+              <div className="mb-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
+                <h2 className="mb-4 text-2xl font-semibold">
+                  Allocation du portefeuille
+                </h2>
+
+                <div className="grid gap-3">
+                  {openPositions
+                    .sort(
+                      (a, b) =>
+                        (b.portfolioPosition?.current_value || 0) -
+                        (a.portfolioPosition?.current_value || 0)
+                    )
+                    .map((etf) => {
+                      const value = etf.portfolioPosition?.current_value || 0;
+                      const total = portfolioSummary.current_value || 0;
+                      const weight = total > 0 ? (value / total) * 100 : 0;
+
+                      return (
+                        <div key={etf.id} className="rounded-lg bg-slate-800 p-4">
+                          <div className="mb-2 flex items-center justify-between gap-4">
+                            <div>
+                              <p className="font-bold">{etf.ticker}</p>
+                              <p className="text-sm text-slate-400">{etf.name}</p>
+                            </div>
+
+                            <div className="text-right">
+                              <p className="font-bold">
+                                {formatNumber(value)} {etf.currency || "EUR"}
+                              </p>
+                              <p className="text-sm text-slate-400">
+                                {formatNumber(weight)} %
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="h-2 rounded-full bg-slate-700">
+                            <div
+                              className="h-2 rounded-full bg-emerald-400"
+                              style={{ width: `${Math.min(weight, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
+            {activePortfolio && portfolioSummary && openPositions.length > 0 && (
+              <div className="mb-8 grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-slate-700 bg-slate-900 p-6">
+                  <h2 className="mb-4 text-2xl font-semibold">
+                    Allocation par région
+                  </h2>
+
+                  <div className="grid gap-3">
+                    {buildAllocation(
+                      openPositions,
+                      "region",
+                      portfolioSummary.current_value || 0
+                    ).map((item) => (
+                      <div key={item.label} className="rounded-lg bg-slate-800 p-4">
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="font-bold">{item.label}</p>
+                          <p className="text-sm text-slate-400">
+                            {formatNumber(item.value)} EUR — {formatNumber(item.weight)} %
+                          </p>
+                        </div>
+
+                        <div className="h-2 rounded-full bg-slate-700">
+                          <div
+                            className="h-2 rounded-full bg-cyan-400"
+                            style={{ width: `${Math.min(item.weight, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-700 bg-slate-900 p-6">
+                  <h2 className="mb-4 text-2xl font-semibold">
+                    Allocation par thème
+                  </h2>
+
+                  <div className="grid gap-3">
+                    {buildAllocation(
+                      openPositions,
+                      "topic",
+                      portfolioSummary.current_value || 0
+                    ).map((item) => (
+                      <div key={item.label} className="rounded-lg bg-slate-800 p-4">
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="font-bold">{item.label}</p>
+                          <p className="text-sm text-slate-400">
+                            {formatNumber(item.value)} EUR — {formatNumber(item.weight)} %
+                          </p>
+                        </div>
+
+                        <div className="h-2 rounded-full bg-slate-700">
+                          <div
+                            className="h-2 rounded-full bg-purple-400"
+                            style={{ width: `${Math.min(item.weight, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {activePortfolio && portfolioRealizedSummary && (
         <div className="mb-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
           <h2 className="mb-4 text-2xl font-semibold">
