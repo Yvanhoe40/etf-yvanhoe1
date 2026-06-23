@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 
 type Etf = {
   id: string;
@@ -124,6 +131,26 @@ const regionStyle: Record<string, string> = {
   Commodities: "border-l-yellow-500",
   Sectors: "border-l-purple-500",
 };
+const chartColors = [
+  "#22c55e",
+  "#06b6d4",
+  "#a855f7",
+  "#f97316",
+  "#eab308",
+  "#ef4444",
+  "#3b82f6",
+  "#14b8a6",
+];
+
+const defaultTargetRegionalAllocation = {
+  World: 4,
+  US: 31,
+  Europe: 5,
+  EM: 25,
+  Commodities: 10,
+  Sectors: 25,
+};
+
 
 export default function Home() {
   const [etfs, setEtfs] = useState<EtfWithSnapshot[]>([]);
@@ -153,6 +180,15 @@ export default function Home() {
   const [currency, setCurrency] = useState("EUR");
   const [region, setRegion] = useState("World");
   const [topic, setTopic] = useState("");
+  const [targetRegionalAllocation, setTargetRegionalAllocation] = useState(
+  defaultTargetRegionalAllocation
+);
+  const targetAllocationTotal =
+  Object.values(targetRegionalAllocation).reduce(
+    (sum, value) => sum + value,
+    0
+  );
+
 
   function today() {
     return new Date().toISOString().slice(0, 10);
@@ -557,10 +593,65 @@ async function loadPortfolioRealizedSummary(
     loadEtfs(null);
   }, []);
 
-  const openPositions = etfs.filter(
-  (etf) => (etf.portfolioPosition?.quantity_held || 0) > 0
-  );
+    const openPositions = etfs.filter(
+      (etf) => (etf.portfolioPosition?.quantity_held || 0) > 0
+    );
+
+    const sortedOpenPositions = [...openPositions].sort(
+      (a, b) =>
+        (b.portfolioPosition?.current_value || 0) -
+        (a.portfolioPosition?.current_value || 0)
+    );
+
+    const portfolioTotalValue = portfolioSummary?.current_value || 0;
+
+    const biggestPositionWeight =
+      portfolioTotalValue > 0
+        ? ((sortedOpenPositions[0]?.portfolioPosition?.current_value || 0) /
+            portfolioTotalValue) *
+          100
+        : 0;
+
+    const top3Weight =
+      portfolioTotalValue > 0
+        ? (sortedOpenPositions
+            .slice(0, 3)
+            .reduce(
+              (sum, etf) => sum + (etf.portfolioPosition?.current_value || 0),
+              0
+            ) /
+            portfolioTotalValue) *
+          100
+        : 0;
+
+    const top5Weight =
+      portfolioTotalValue > 0
+        ? (sortedOpenPositions
+            .slice(0, 5)
+            .reduce(
+              (sum, etf) => sum + (etf.portfolioPosition?.current_value || 0),
+              0
+            ) /
+            portfolioTotalValue) *
+          100
+        : 0;
+
+    const targetRegions = buildAllocation(
+      openPositions,
+      "region",
+      portfolioTotalValue
+    );
+
+    const totalGap = targetRegions.reduce((sum, item) => {
+      const target = targetRegionalAllocation[item.label] ?? 0;
+      return sum + Math.abs(item.weight - target);
+    }, 0);
+
+    const balanceScore = Math.max(0, 100 - totalGap);
+
     return (
+
+
     <main className="min-h-screen bg-slate-950 text-white p-10">
       <h1 className="text-4xl font-bold mb-2">ETF Dashboard</h1>
       <p className="text-slate-400 mb-8">
@@ -735,6 +826,45 @@ async function loadPortfolioRealizedSummary(
               </p>
             </div>
           </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">Concentration max</p>
+              <p className="text-2xl font-bold">
+                {formatNumber(biggestPositionWeight)} %
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">Concentration Top 3</p>
+              <p className="text-2xl font-bold">
+                {formatNumber(top3Weight)} %
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-slate-800 p-4">
+              <p className="text-xs text-slate-400">Concentration Top 5</p>
+              <p className="text-2xl font-bold">
+                {formatNumber(top5Weight)} %
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg bg-slate-800 p-4">
+            <p className="text-xs text-slate-400">Portfolio Balance Score</p>
+            <p
+              className={`text-3xl font-bold ${
+                balanceScore >= 80
+                  ? "text-green-400"
+                  : balanceScore >= 60
+                  ? "text-amber-400"
+                  : "text-red-400"
+              }`}
+            >
+              {formatNumber(balanceScore, 0)} / 100
+            </p>
+          </div>
+
         </div>
       )}
 
@@ -784,6 +914,233 @@ async function loadPortfolioRealizedSummary(
                       );
                     })}
                 </div>
+              </div>
+            )}
+
+          <div className="mb-8 grid gap-6 lg:grid-cols-2">
+            <div className="rounded-xl border border-slate-700 bg-slate-900 p-6">
+              <h2 className="mb-4 text-2xl font-semibold">
+                Allocation par région
+              </h2>
+
+              <div className="flex h-80 min-h-[320px] w-full justify-center">
+                <PieChart width={320} height={320}>
+                    <Pie
+                      data={buildAllocation(openPositions, "region", portfolioSummary?.current_value || 0).map((item) => ({
+                      name: item.label,
+                      value: item.value,
+                    }))}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={65}
+                      outerRadius={110}
+                      label={false}
+                    
+                    >
+                      {buildAllocation(openPositions, "region", portfolioSummary?.current_value || 0).map((_, index) => (
+                        <Cell
+                          key={index}
+                          fill={chartColors[index % chartColors.length]}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                    formatter={(value: number) =>
+                      `${formatNumber(value)} EUR`
+                    }
+                  />
+                </PieChart>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-700 bg-slate-900 p-6">
+              <h2 className="mb-4 text-2xl font-semibold">
+                Allocation par thème
+              </h2>
+
+              <div className="flex h-80 min-h-[320px] w-full justify-center">
+                <PieChart width={320} height={320}>
+                    <Pie
+
+                    data={(() => {
+                      const items = buildAllocation(
+                        openPositions,
+                        "topic",
+                        portfolioSummary?.current_value || 0
+                      );
+
+                      const top5 = items.slice(0, 5);
+
+                      const othersValue = items
+                        .slice(5)
+                        .reduce((sum, item) => sum + item.value, 0);
+
+                      const finalItems =
+                        othersValue > 0
+                          ? [...top5, { label: "Autres", value: othersValue }]
+                          : top5;
+
+                      return finalItems.map((item) => ({
+                        name: item.label,
+                        value: item.value,
+                      }));
+                    })()}
+
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={65}
+                      outerRadius={110}
+                      label={false}
+                  
+                    >
+                      {(() => {
+                        const items = buildAllocation(
+                          openPositions,
+                          "topic",
+                          portfolioSummary?.current_value || 0
+                        );
+
+                        const top5 = items.slice(0, 5);
+
+                        const othersValue = items
+                          .slice(5)
+                          .reduce((sum, item) => sum + item.value, 0);
+
+                        const finalItems =
+                          othersValue > 0
+                            ? [...top5, { label: "Autres", value: othersValue }]
+                            : top5;
+
+                        return finalItems.map((_, index) => (
+                          <Cell
+                            key={index}
+                            fill={chartColors[index % chartColors.length]}
+                          />
+                        ));
+                      })()}
+                    </Pie>
+                    <Tooltip
+                    formatter={(value: number) =>
+                      `${formatNumber(value)} EUR`
+                    }
+                  />
+                </PieChart>
+              </div>
+            </div>
+          </div>
+
+            {activePortfolio && portfolioSummary && openPositions.length > 0 && (
+              <div className="mb-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
+                <h2 className="mb-4 text-2xl font-semibold">
+                  Allocation cible vs actuelle
+                </h2>
+
+                <div className="mb-6 rounded-lg bg-slate-800 p-4">
+                  <div className="mb-3 font-semibold">
+                    Allocation cible
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-6">
+                    {Object.entries(targetRegionalAllocation).map(([region, value]) => (
+                      <div key={region}>
+                        <label className="mb-1 block text-xs text-slate-400">
+                          {region}
+                        </label>
+
+                        <input
+                          type="number"
+                          value={value}
+                          onChange={(e) =>
+                            setTargetRegionalAllocation((prev) => ({
+                              ...prev,
+                              [region]: Number(e.target.value),
+                            }))
+                          }
+                          className="w-full rounded bg-slate-700 p-2"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div
+                    className={`mt-4 font-semibold ${
+                      targetAllocationTotal === 100
+                        ? "text-green-400"
+                        : "text-red-400"
+                    }`}
+                  >
+                    Total : {targetAllocationTotal} %
+                    {targetAllocationTotal === 100
+                      ? " ✓ Allocation valide"
+                      : " ⚠ Doit être égal à 100 %"}
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="text-slate-400">
+                      <tr className="border-b border-slate-700">
+                        <th className="py-2">Région</th>
+                        <th>Actuel</th>
+                        <th>Cible</th>
+                        <th>Écart</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                  {buildAllocation(openPositions, "region", portfolioSummary.current_value || 0)
+                    .map((item) => {
+                      const target = targetRegionalAllocation[item.label] ?? 0;
+                      const gap = item.weight - target;
+                      const amountToRebalance =
+                      ((target - item.weight) / 100) *
+                      (portfolioSummary.current_value || 0);
+
+                    return (
+                      <tr key={item.label} className="border-b border-slate-700">
+                        <td className="py-3 font-bold">
+                          {item.label}
+                        </td>
+
+                        <td>
+                          {formatNumber(item.weight)} %
+                        </td>
+
+                        <td>
+                          {formatNumber(target)} %
+                        </td>
+
+                        <td
+                          className={
+                            Math.abs(gap) <= 2
+                              ? "text-green-400"
+                              : Math.abs(gap) <= 5
+                              ? "text-amber-400"
+                              : "text-red-400"
+                          }
+                        >
+                          {formatNumber(gap)} %
+                        </td>
+
+                        <td className="text-slate-300">
+                          {amountToRebalance > 0
+                            ? `Acheter ${formatNumber(amountToRebalance)} EUR`
+                            : `Vendre ${formatNumber(Math.abs(amountToRebalance))} EUR`}
+                        </td>
+                      </tr>
+                    );
+
+
+                    })}
+                    </tbody>
+                    </table>
+                    </div>
+
+              
               </div>
             )}
 
