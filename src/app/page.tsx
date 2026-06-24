@@ -643,7 +643,10 @@ async function loadPortfolioRealizedSummary(
     );
 
     const totalGap = targetRegions.reduce((sum, item) => {
-      const target = targetRegionalAllocation[item.label] ?? 0;
+      const target =
+        targetRegionalAllocation[
+          item.label as keyof typeof targetRegionalAllocation
+        ] ?? 0;
       return sum + Math.abs(item.weight - target);
     }, 0);
 
