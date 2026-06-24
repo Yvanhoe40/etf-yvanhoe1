@@ -118,6 +118,14 @@ type TransactionForm = {
   note: string;
 };
 
+type PortfolioTargetAllocation = {
+  id: string;
+  portfolio_id: string;
+  category_type: string;
+  category_name: string;
+  target_percent: number;
+};
+
 const regions = ["World", "US", "Europe", "EM", "Commodities", "Sectors"];
 const exchanges = ["EURONEXT", "XETRA", "MILAN"];
 const currencies = ["EUR", "USD", "GBP", "CHF"];
@@ -183,6 +191,10 @@ export default function Home() {
   const [targetRegionalAllocation, setTargetRegionalAllocation] = useState(
   defaultTargetRegionalAllocation
 );
+  const [targetAllocations, setTargetAllocations] = useState<
+    PortfolioTargetAllocation[]
+  >([]);
+
   const targetAllocationTotal =
   Object.values(targetRegionalAllocation).reduce(
     (sum, value) => sum + value,
@@ -287,6 +299,62 @@ async function loadPortfolioSummary(portfolioId: string | null) {
   setPortfolioSummary(data || null);
 }
 
+  async function loadTargetAllocations(portfolioId: string) {
+    const { data, error } = await supabase
+      .from("portfolio_target_allocations")
+      .select("*")
+      .eq("portfolio_id", portfolioId)
+      .eq("category_type", "region");
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setTargetAllocations(data || []);
+
+    if (data && data.length > 0) {
+      const loadedTargets = { ...defaultTargetRegionalAllocation };
+
+      data.forEach((row) => {
+        loadedTargets[row.category_name as keyof typeof loadedTargets] =
+          Number(row.target_percent);
+      });
+
+      setTargetRegionalAllocation(loadedTargets);
+    } else {
+      setTargetRegionalAllocation(defaultTargetRegionalAllocation);
+    }
+
+  }
+
+  async function saveTargetAllocations() {
+    if (!activePortfolio) return;
+
+    const rows = Object.entries(targetRegionalAllocation).map(
+      ([category_name, target_percent]) => ({
+        portfolio_id: activePortfolio.id,
+        category_type: "region",
+        category_name,
+        target_percent,
+      })
+    );
+
+    const { error } = await supabase
+      .from("portfolio_target_allocations")
+      .upsert(rows, {
+        onConflict: "portfolio_id,category_type,category_name",
+      });
+
+    if (error) {
+      console.error(error);
+      alert("Erreur lors de la sauvegarde");
+      return;
+    }
+
+    alert("Allocations cibles sauvegardées");
+  }
+
 async function loadPortfolioRealizedSummary(
   portfolioId: string | null
 ) {
@@ -385,6 +453,7 @@ async function loadPortfolioRealizedSummary(
     await loadEtfs(data.id);
     await loadPortfolioSummary(data.id);
     await loadPortfolioRealizedSummary(data.id);
+    await loadTargetAllocations(data.id);
   }
 
   async function disconnectPortfolio() {
@@ -393,6 +462,7 @@ async function loadPortfolioRealizedSummary(
     setEditingTransactionId(null);
     setPortfolioSummary(null);
     setPortfolioRealizedSummary(null);
+    setTargetAllocations([]);
     await loadEtfs(null);
   }
 
@@ -1068,6 +1138,13 @@ async function loadPortfolioRealizedSummary(
                       </div>
                     ))}
                   </div>
+                  
+                   <button
+                    onClick={saveTargetAllocations}
+                    className="mt-4 rounded bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-500"
+                  >
+                    Sauvegarder les cibles
+                  </button>   
 
                   <div
                     className={`mt-4 font-semibold ${
