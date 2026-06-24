@@ -950,8 +950,8 @@ async function loadPortfolioRealizedSummary(
                       ))}
                     </Pie>
                     <Tooltip
-                    formatter={(value: number) =>
-                      `${formatNumber(value)} EUR`
+                    formatter={(value) =>
+                     `${formatNumber(Number(value || 0))} EUR`
                     }
                   />
                 </PieChart>
@@ -1027,8 +1027,8 @@ async function loadPortfolioRealizedSummary(
                       })()}
                     </Pie>
                     <Tooltip
-                    formatter={(value: number) =>
-                      `${formatNumber(value)} EUR`
+                    formatter={(value) =>
+                    `${formatNumber(Number(value || 0))} EUR`
                     }
                   />
                 </PieChart>
