@@ -1097,7 +1097,10 @@ async function loadPortfolioRealizedSummary(
                     <tbody>
                   {buildAllocation(openPositions, "region", portfolioSummary.current_value || 0)
                     .map((item) => {
-                      const target = targetRegionalAllocation[item.label] ?? 0;
+                      const target =
+                        targetRegionalAllocation[
+                          item.label as keyof typeof targetRegionalAllocation
+                        ] ?? 0;
                       const gap = item.weight - target;
                       const amountToRebalance =
                       ((target - item.weight) / 100) *
