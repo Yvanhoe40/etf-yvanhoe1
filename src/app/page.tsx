@@ -721,6 +721,31 @@ async function loadPortfolioRealizedSummary(
     }, 0);
 
     const balanceScore = Math.max(0, 100 - totalGap);
+    
+    const rebalancingPlan = Object.entries(targetRegionalAllocation)
+    .map(([label, target]) => {
+      const current = targetRegions.find(
+        (item) => item.label === label
+      );
+
+      const currentWeight = current?.weight || 0;
+
+      const gap = currentWeight - target;
+
+      const amountToRebalance =
+        ((target - currentWeight) / 100) *
+        portfolioTotalValue;
+
+      return {
+        label,
+        gap,
+        amount: amountToRebalance,
+      };
+    })
+    .filter((item) => Math.abs(item.amount) >= 1);
+
+    const rebalancingBuys = rebalancingPlan.filter((item) => item.amount > 0);
+    const rebalancingSells = rebalancingPlan.filter((item) => item.amount < 0);
 
     return (
 
@@ -1226,6 +1251,50 @@ async function loadPortfolioRealizedSummary(
               
               </div>
             )}
+            
+            {activePortfolio && rebalancingPlan.length > 0 && (
+            <div className="mb-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
+              <h2 className="mb-4 text-2xl font-semibold">
+                Plan de rééquilibrage
+              </h2>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-lg bg-slate-800 p-4">
+                  <h3 className="mb-3 font-semibold text-green-400">Achats</h3>
+
+                  {rebalancingBuys.length === 0 ? (
+                    <p className="text-sm text-slate-400">Aucun achat recommandé.</p>
+                  ) : (
+                    rebalancingBuys.map((item) => (
+                      <div key={item.label} className="flex justify-between border-b border-slate-700 py-2">
+                        <span>{item.label}</span>
+                        <span className="font-semibold text-green-400">
+                          {formatNumber(item.amount)} EUR
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="rounded-lg bg-slate-800 p-4">
+                  <h3 className="mb-3 font-semibold text-red-400">Ventes</h3>
+
+                  {rebalancingSells.length === 0 ? (
+                    <p className="text-sm text-slate-400">Aucune vente recommandée.</p>
+                  ) : (
+                    rebalancingSells.map((item) => (
+                      <div key={item.label} className="flex justify-between border-b border-slate-700 py-2">
+                        <span>{item.label}</span>
+                        <span className="font-semibold text-red-400">
+                          {formatNumber(Math.abs(item.amount))} EUR
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
             {activePortfolio && portfolioSummary && openPositions.length > 0 && (
               <div className="mb-8 grid gap-4 md:grid-cols-2">
