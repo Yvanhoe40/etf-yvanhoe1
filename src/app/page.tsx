@@ -102,10 +102,37 @@ type Transaction = {
   note: string | null;
 };
 
+type Recommendation = {
+  etf_id: string;
+  portfolio_id: string;
+  recommendation_level: string;
+  recommendation_name: string;
+  recommendation_confidence: number | null;
+  thesis_code: string | null;
+  thesis_confidence: number | null;
+  is_held: boolean | null;
+  latent_gain_percent: number | null;
+  explanation: string | null;
+};
+
+type RecommendationFactor = {
+  recommendation_id: string;
+  etf_id: string;
+  portfolio_id: string;
+  trading_date: string;
+  factor_category: string;
+  factor_label: string;
+  factor_explanation: string;
+  importance_score: number;
+  factor_sentiment: "favorable" | "vigilance" | "vendeur";
+};
+
 type EtfWithSnapshot = Etf & {
   snapshot?: Snapshot | null;
   portfolioPosition?: PortfolioPosition | null;
   transactions?: Transaction[];
+  recommendation?: Recommendation | null;
+  recommendationFactors?: RecommendationFactor[];
 };
 
 type TransactionForm = {
@@ -380,6 +407,8 @@ async function loadPortfolioRealizedSummary(
 
     let positionData: PortfolioPosition[] = [];
     let transactionData: Transaction[] = [];
+    let recommendationData: any[] = [];
+    let recommendationFactorData: RecommendationFactor[] = [];
 
     if (portfolioId) {
       const { data: positions } = await supabase
@@ -394,8 +423,23 @@ async function loadPortfolioRealizedSummary(
         .order("transaction_date", { ascending: false })
         .order("created_at", { ascending: false });
 
+      const { data: recommendations } = await supabase
+        .from("recommendations")
+        .select("*")
+        .eq("portfolio_id", portfolioId)
+        .order("trading_date", { ascending: false });
+
+      const { data: recommendationFactors } = await supabase
+        .from("recommendation_decision_factor_items")
+        .select("*")
+        .eq("portfolio_id", portfolioId)
+        .order("importance_score", { ascending: false });
+
+      
       positionData = positions || [];
       transactionData = transactions || [];
+      recommendationData = recommendations || [];
+      recommendationFactorData = recommendationFactors || [];  
     }
 
     const snapshotsByEtfId = new Map(
@@ -407,17 +451,38 @@ async function loadPortfolioRealizedSummary(
     );
 
     const transactionsByEtfId = new Map<string, Transaction[]>();
-
-    transactionData.forEach((transaction) => {
+      transactionData.forEach((transaction) => {
       const existing = transactionsByEtfId.get(transaction.etf_id) || [];
       transactionsByEtfId.set(transaction.etf_id, [...existing, transaction]);
     });
+
+    const recommendationsByEtfId = new Map<string, any>();
+      recommendationData.forEach((recommendation) => {
+        recommendationsByEtfId.set(recommendation.etf_id, recommendation);
+});
+    const recommendationFactorsByEtfId = new Map<
+        string,
+        RecommendationFactor[]
+      >();
+
+      recommendationFactorData.forEach((factor) => {
+        const existing =
+          recommendationFactorsByEtfId.get(factor.etf_id) || [];
+
+        recommendationFactorsByEtfId.set(
+          factor.etf_id,
+          [...existing, factor]
+        );
+      });
 
     const merged = (etfData || []).map((etf) => ({
       ...etf,
       snapshot: snapshotsByEtfId.get(etf.id) || null,
       portfolioPosition: positionsByEtfId.get(etf.id) || null,
       transactions: transactionsByEtfId.get(etf.id) || [],
+      recommendation: recommendationsByEtfId.get(etf.id) || null,
+      recommendationFactors:
+        recommendationFactorsByEtfId.get(etf.id) || [],
     }));
 
     const sorted = merged.sort((a, b) => {
@@ -747,6 +812,82 @@ async function loadPortfolioRealizedSummary(
     const rebalancingBuys = rebalancingPlan.filter((item) => item.amount > 0);
     const rebalancingSells = rebalancingPlan.filter((item) => item.amount < 0);
 
+    const totalRebalancingBuys = rebalancingBuys.reduce(
+      (sum, item) => sum + item.amount,
+      0
+    );
+
+    const totalRebalancingSells = rebalancingSells.reduce(
+      (sum, item) => sum + Math.abs(item.amount),
+      0
+    );
+
+    const rebalancingCashNeed =
+      totalRebalancingBuys - totalRebalancingSells;
+
+    function getRecommendationStyle(level?: string) {
+      switch (level) {
+        case "buy":
+          return {
+            border: "border-green-500/40",
+            gradient: "from-slate-800 to-green-950/30",
+            text: "text-green-400",
+          };
+
+        case "hold":
+          return {
+            border: "border-blue-500/40",
+            gradient: "from-slate-800 to-blue-950/30",
+            text: "text-blue-400",
+          };
+
+        case "reduce":
+          return {
+            border: "border-orange-500/40",
+            gradient: "from-slate-800 to-orange-950/30",
+            text: "text-orange-400",
+          };
+
+        case "sell":
+          return {
+            border: "border-red-500/40",
+            gradient: "from-slate-800 to-red-950/30",
+            text: "text-red-400",
+          };
+
+        default:
+          return {
+            border: "border-slate-600",
+            gradient: "from-slate-800 to-slate-900",
+            text: "text-slate-300",
+          };
+      }
+    }
+    function getRecommendationLabel(level?: string) {
+    switch (level) {
+        case "buy":
+        case "strong_buy":
+            return "🟢 BUY";
+
+        case "hold":
+            return "🔵 HOLD";
+
+        case "reduce":
+            return "🟠 REDUCE";
+
+        case "sell":
+            return "🔴 SELL";
+
+        case "wait":
+            return "⚪ WAIT";
+
+        case "watch":
+            return "👀 WATCH";
+
+        default:
+            return "⚪ WAIT";
+    }
+}
     return (
 
 
@@ -1296,6 +1437,45 @@ async function loadPortfolioRealizedSummary(
             </div>
           )}
 
+            <div className="mt-4 rounded-lg bg-slate-800 p-4">
+              <h3 className="mb-3 font-semibold">Résumé</h3>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div>
+                  <p className="text-xs text-slate-400">Total achats</p>
+                  <p className="text-xl font-bold text-green-400">
+                    {formatNumber(totalRebalancingBuys)} EUR
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-400">Total ventes</p>
+                  <p className="text-xl font-bold text-red-400">
+                    {formatNumber(totalRebalancingSells)} EUR
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-400">Cash</p>
+                  <p
+                    className={`text-xl font-bold ${
+                      Math.abs(rebalancingCashNeed) < 1
+                        ? "text-green-400"
+                        : rebalancingCashNeed > 0
+                        ? "text-amber-400"
+                        : "text-cyan-400"
+                    }`}
+                  >
+                    {Math.abs(rebalancingCashNeed) < 1
+                      ? "Auto-finançable"
+                      : rebalancingCashNeed > 0
+                      ? `À investir ${formatNumber(rebalancingCashNeed)} EUR`
+                      : `Cash libéré ${formatNumber(Math.abs(rebalancingCashNeed))} EUR`}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {activePortfolio && portfolioSummary && openPositions.length > 0 && (
               <div className="mb-8 grid gap-4 md:grid-cols-2">
                 <div className="rounded-xl border border-slate-700 bg-slate-900 p-6">
@@ -1547,6 +1727,9 @@ async function loadPortfolioRealizedSummary(
           const position = etf.portfolioPosition;
           const transactions = etf.transactions || [];
           const transactionForm = transactionForms[etf.id];
+          const recommendationStyle = getRecommendationStyle(
+            etf.recommendation?.recommendation_level
+          );
 
           const isPositive = (snapshot?.day_change_percent || 0) >= 0;
           const isGainPositive = (position?.unrealized_gain || 0) >= 0;
@@ -1572,6 +1755,76 @@ async function loadPortfolioRealizedSummary(
             position?.net_invested_amount
               ? (position.unrealized_gain / position.net_invested_amount) * 100
               : null;
+          const facteursFavorables =
+            (etf.recommendationFactors || []).filter(
+              (f) => f.factor_sentiment === "favorable"
+            );
+
+          const facteursVigilance =
+            (etf.recommendationFactors || []).filter(
+              (f) => f.factor_sentiment === "vigilance"
+            );
+
+          const facteursVendeurs =
+            (etf.recommendationFactors || []).filter(
+              (f) => f.factor_sentiment === "vendeur"
+            );
+          const renderFacteurs = (facteurs: RecommendationFactor[]) =>
+            facteurs.map((factor) => (
+              <div
+                key={`${factor.factor_category}-${factor.factor_label}`}
+                className={`rounded-lg border border-slate-700 border-l-4 bg-slate-900/40 p-3 ${
+                  factor.importance_score >= 75
+                    ? "border-l-red-400"
+                    : factor.importance_score >= 50
+                    ? "border-l-orange-400"
+                    : factor.importance_score >= 30
+                    ? "border-l-yellow-400"
+                    : "border-l-slate-500"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold text-white">
+                    {factor.factor_category === "PORTEFEUILLE"
+                      ? "💼 "
+                      : factor.factor_category === "TECHNIQUE"
+                      ? "📈 "
+                      : factor.factor_category === "CHANDELIER"
+                      ? "🕯️ "
+                      : "🔎 "}
+                    {factor.factor_label}
+                  </div>
+
+                  <div className="w-56">
+                    <div className="mb-1 flex justify-between text-xs text-slate-400">
+                      <span>Importance</span>
+                      <span>{factor.importance_score}/100</span>
+                    </div>
+
+                    <div className="h-3 rounded-full bg-slate-700">
+                      <div
+                        className={`h-3 rounded-full ${
+                          factor.importance_score >= 75
+                            ? "bg-red-400"
+                            : factor.importance_score >= 50
+                            ? "bg-orange-400"
+                            : factor.importance_score >= 30
+                            ? "bg-yellow-400"
+                            : "bg-slate-500"
+                        }`}
+                        style={{
+                          width: `${Math.min(Number(factor.importance_score || 0), 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-1 text-sm text-slate-300">
+                  {factor.factor_explanation}
+                </div>
+              </div>
+            ));
 
           return (
             <div
@@ -1584,6 +1837,137 @@ async function loadPortfolioRealizedSummary(
                 <div>
                   <h2 className="text-2xl font-semibold">{etf.ticker}</h2>
                   <p className="text-slate-300">{etf.name}</p>
+
+                  {etf.recommendation && (
+                    <div className="mt-4 w-full rounded-2xl border border-orange-500/40 bg-gradient-to-br from-slate-800 to-orange-950/30 p-5 shadow-lg">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`rounded-full border px-3 py-1 text-xs font-extrabold uppercase tracking-wide ${recommendationStyle.border} ${recommendationStyle.text}`}
+                          >
+                            {getRecommendationLabel(etf.recommendation.recommendation_level)}
+                          </span>
+
+                          <p className="text-xs uppercase tracking-wide text-slate-400">
+                            MOTEUR DE DÉCISION
+                          </p>
+                        </div>
+
+                        <p className={`mt-3 text-4xl font-extrabold ${recommendationStyle.text}`}>
+                          {etf.recommendation.recommendation_name}
+                        </p>
+
+                          <p className="mt-1 text-sm text-slate-400">
+                            Thèse : {etf.recommendation.thesis_code}
+                          </p>
+                        </div>
+
+                        <div className="text-right">
+                          <p className="text-xs text-slate-400">AI Score</p>
+                          <p className="text-4xl font-extrabold text-cyan-400">
+                            {formatNumber(etf.recommendation.recommendation_confidence, 0)}
+                          </p>
+                          <p className="text-xs text-slate-400">/100</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 h-3 rounded-full bg-slate-700">
+                        <div
+                          className="h-3 rounded-full bg-cyan-400"
+                          style={{
+                            width: `${Math.min(
+                              Number(etf.recommendation.recommendation_confidence || 0),
+                              100
+                            )}%`,
+                          }}
+                        />
+                      </div>
+
+                      <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+                        <div className="rounded-lg bg-slate-900/60 p-3">
+                          <p className="text-xs text-slate-500">Confiance thèse</p>
+                          <p className="font-bold text-white">
+                            {formatNumber(etf.recommendation.thesis_confidence, 0)} %
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg bg-slate-900/60 p-3">
+                          <p className="text-xs text-slate-500">Position</p>
+                          <p className="font-bold text-white">
+                            {etf.recommendation.is_held ? "Détenue" : "Non détenue"}
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg bg-slate-900/60 p-3">
+                          <p className="text-xs text-slate-500">Gain latent</p>
+                          <p
+                            className={`font-bold ${
+                              (etf.recommendation.latent_gain_percent || 0) >= 0
+                                ? "text-green-400"
+                                : "text-red-400"
+                            }`}
+                          >
+                            {formatNumber(etf.recommendation.latent_gain_percent)} %
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-4 border-t border-slate-700 pt-4">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                          FACTEURS DE DÉCISION
+                        </p>
+                      
+                      <div className="mt-3 space-y-5">
+                        {facteursFavorables.length > 0 && (
+                          <div>
+                            <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-green-400">
+                              🟢 Points favorables
+                            </h4>
+                            <div className="space-y-3">{renderFacteurs(facteursFavorables)}</div>
+                          </div>
+                        )}
+
+                        {facteursVigilance.length > 0 && (
+                          <div>
+                            <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-orange-400">
+                              🟠 Points de vigilance
+                            </h4>
+                            <div className="space-y-3">{renderFacteurs(facteursVigilance)}</div>
+                          </div>
+                        )}
+
+                        {facteursVendeurs.length > 0 && (
+                          <div>
+                            <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-red-400">
+                              🔴 Signaux vendeurs
+                            </h4>
+                            <div className="space-y-3">{renderFacteurs(facteursVendeurs)}</div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-5 border-t border-slate-700 pt-4">
+
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                            CONCLUSION
+                        </p>
+
+                        <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                            Le moteur d'analyse détecte une probabilité importante de correction.
+                            L'ETF est déjà détenu dans votre portefeuille et présente une plus-value
+                            latente de {formatNumber(etf.recommendation.latent_gain_percent)} %.
+                            Une réduction partielle est recommandée afin de sécuriser une partie
+                            des gains tout en conservant une exposition au marché.
+                        </p>
+
+                    </div>
+                      </div>
+                      
+                    </div>
+                  )}
+
                   <p className="text-slate-500 mt-1">ISIN : {etf.isin}</p>
                   <p className="text-slate-500">Exchange : {etf.exchange}</p>
                   <p className="text-slate-500">Currency : {etf.currency || "EUR"}</p>
