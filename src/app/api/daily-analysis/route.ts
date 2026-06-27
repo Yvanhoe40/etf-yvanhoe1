@@ -86,12 +86,15 @@ export async function GET() {
     }
   }
 
-  return Response.json({
+    return Response.json({
+    debug: "daily-analysis-range-4999",
+
     status: "completed",
     totalEtfs: etfs.length,
     successful: results.filter((r) => r.status === "success").length,
     skipped: results.filter((r) => r.status === "skipped").length,
     failed: results.filter((r) => r.status === "error").length,
+
     results,
-  });
+    });
 }
