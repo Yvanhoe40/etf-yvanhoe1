@@ -3,10 +3,17 @@ import { buildTechnicalSnapshot } from "./market/buildTechnicalSnapshot";
 import { runSignalEngine } from "./signal/signalEngine";
 import { runDecisionEngine } from "./decision/decisionEngine";
 import { runExplainEngine } from "./explain/explainEngine";
+import { persistAnalysis } from "./persistence/persistenceEngine";
 
-export function runAdvisorEngine(candles: MarketCandle[]) {
+export async function runAdvisorEngine(
+  candles: MarketCandle[],
+  options?: {
+    etfId?: string;
+    ticker?: string;
+    persist?: boolean;
+  }
+) {
   const marketPoints = runMarketEngine(candles);
-
   const latestPoint = marketPoints[marketPoints.length - 1];
 
   if (!latestPoint) {
@@ -17,6 +24,17 @@ export function runAdvisorEngine(candles: MarketCandle[]) {
   const signals = runSignalEngine(snapshot);
   const decision = runDecisionEngine(signals);
   const explanation = runExplainEngine(decision);
+
+  if (options?.persist && options.etfId && options.ticker) {
+    await persistAnalysis(
+      options.etfId,
+      options.ticker,
+      snapshot,
+      signals,
+      decision,
+      explanation
+    );
+  }
 
   return {
     snapshot,
