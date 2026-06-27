@@ -1,0 +1,73 @@
+import { calculateSMA, type PricePoint } from "./calculateSMA";
+import { calculateEMA } from "./calculateEMA";
+import { calculateRSI, getRSIZone } from "./calculateRSI";
+import { calculateMACD } from "./calculateMACD";
+
+export type MarketCandle = PricePoint & {
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  volume: number | null;
+};
+
+export type MarketAnalysisPoint = {
+  trading_date: string;
+  close: number | null;
+  volume: number | null;
+
+  sma20: number | null;
+  sma50: number | null;
+  sma100: number | null;
+  sma200: number | null;
+
+  ema12: number | null;
+  ema26: number | null;
+
+  rsi14: number | null;
+  rsiZone: "surachat" | "survente" | "neutre" | null;
+
+  macd: number | null;
+  macdSignal: number | null;
+  macdHistogram: number | null;
+};
+
+export function runMarketEngine(
+  candles: MarketCandle[]
+): MarketAnalysisPoint[] {
+  const sorted = [...candles].sort((a, b) =>
+    a.trading_date.localeCompare(b.trading_date)
+  );
+
+  const sma20 = calculateSMA(sorted, 20);
+  const sma50 = calculateSMA(sorted, 50);
+  const sma100 = calculateSMA(sorted, 100);
+  const sma200 = calculateSMA(sorted, 200);
+
+  const ema12 = calculateEMA(sorted, 12);
+  const ema26 = calculateEMA(sorted, 26);
+
+  const rsi14 = calculateRSI(sorted, 14);
+
+  const macd = calculateMACD(sorted);
+
+  return sorted.map((candle) => ({
+    trading_date: candle.trading_date,
+    close: candle.close,
+    volume: candle.volume,
+
+    sma20: sma20[candle.trading_date] ?? null,
+    sma50: sma50[candle.trading_date] ?? null,
+    sma100: sma100[candle.trading_date] ?? null,
+    sma200: sma200[candle.trading_date] ?? null,
+
+    ema12: ema12[candle.trading_date] ?? null,
+    ema26: ema26[candle.trading_date] ?? null,
+
+    rsi14: rsi14[candle.trading_date] ?? null,
+    rsiZone: getRSIZone(rsi14[candle.trading_date] ?? null),
+
+    macd: macd[candle.trading_date]?.macd ?? null,
+    macdSignal: macd[candle.trading_date]?.signal ?? null,
+    macdHistogram: macd[candle.trading_date]?.histogram ?? null,
+  }));
+}
