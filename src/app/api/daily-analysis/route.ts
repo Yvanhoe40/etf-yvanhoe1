@@ -21,10 +21,11 @@ export async function GET() {
 
   for (const etf of etfs) {
     const { data: candles, error: candlesError } = await supabase
-      .from("etf_ohlcv_daily")
-      .select("trading_date, open, high, low, close, volume")
-      .eq("etf_id", etf.id)
-      .order("trading_date", { ascending: true });
+        .from("etf_ohlcv_daily")
+        .select("trading_date, open, high, low, close, volume")
+        .eq("etf_id", etf.id)
+        .order("trading_date", { ascending: true })
+        .range(0, 4999);
 
     if (candlesError) {
       results.push({
