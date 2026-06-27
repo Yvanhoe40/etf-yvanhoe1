@@ -23,8 +23,6 @@ export async function runAdvisorEngine(
     return null;
   }
 
-  console.log("LATEST POINT", latestPoint.trading_date);
-
   const snapshot = buildTechnicalSnapshot(latestPoint);
   const signals = runSignalEngine(snapshot);
   const decision = runDecisionEngine(signals);

@@ -26,6 +26,7 @@ export async function GET() {
     let candles: any[] = [];
     let candlesError: any = null;
 
+    // Chargement paginé de tout l'historique
     for (let from = 0; from < 5000; from += 1000) {
       const to = from + 999;
 
@@ -43,7 +44,7 @@ export async function GET() {
 
       if (!data || data.length === 0) break;
 
-      candles = [...candles, ...data];
+      candles.push(...data);
 
       if (data.length < 1000) break;
     }
@@ -57,12 +58,12 @@ export async function GET() {
       continue;
     }
 
-    if (!candles || candles.length < 50) {
+    if (candles.length < 50) {
       results.push({
         ticker: etf.ticker,
         status: "skipped",
         error: "Not enough historical candles",
-        candles: candles?.length ?? 0,
+        candles: candles.length,
       });
       continue;
     }
@@ -86,8 +87,6 @@ export async function GET() {
       results.push({
         ticker: etf.ticker,
         status: "success",
-        candlesLoaded: candles.length,
-        lastCandle: marketCandles[marketCandles.length - 1].trading_date,
         analysisDate: analysis?.snapshot.trading_date,
         decision: analysis?.decision.decisionName,
         score: analysis?.decision.score,
@@ -104,8 +103,6 @@ export async function GET() {
   }
 
   return Response.json({
-    debug: "daily-analysis-pagination-v2",
-    generatedAt: new Date().toISOString(),
     status: "completed",
     totalEtfs: etfs.length,
     successful: results.filter((r) => r.status === "success").length,
