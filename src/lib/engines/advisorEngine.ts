@@ -14,7 +14,9 @@ export async function runAdvisorEngine(
   }
 ) {
   const marketPoints = runMarketEngine(candles);
-  const latestPoint = marketPoints[marketPoints.length - 1];
+  const latestPoint = [...marketPoints]
+  .reverse()
+  .find((point) => point.close !== null);
 
   console.log(
   "LATEST POINT",
