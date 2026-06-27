@@ -2,6 +2,9 @@ import { supabase } from "@/lib/supabase";
 import { runAdvisorEngine } from "@/lib/engines/advisorEngine";
 import type { MarketCandle } from "@/lib/engines/market/marketEngine";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET() {
   const { data: etfs, error: etfsError } = await supabase
     .from("etfs")
@@ -20,12 +23,30 @@ export async function GET() {
   const results = [];
 
   for (const etf of etfs) {
-    const { data: candles, error: candlesError } = await supabase
+    let candles: any[] = [];
+    let candlesError: any = null;
+
+    for (let from = 0; from < 5000; from += 1000) {
+      const to = from + 999;
+
+      const { data, error } = await supabase
         .from("etf_ohlcv_daily")
         .select("trading_date, open, high, low, close, volume")
         .eq("etf_id", etf.id)
         .order("trading_date", { ascending: true })
-        .range(0, 4999);
+        .range(from, to);
+
+      if (error) {
+        candlesError = error;
+        break;
+      }
+
+      if (!data || data.length === 0) break;
+
+      candles = [...candles, ...data];
+
+      if (data.length < 1000) break;
+    }
 
     if (candlesError) {
       results.push({
@@ -56,12 +77,6 @@ export async function GET() {
     }));
 
     try {
-
-      console.log(
-        etf.ticker,
-        marketCandles[marketCandles.length - 1].trading_date
-        );
-        
       const analysis = await runAdvisorEngine(marketCandles, {
         etfId: etf.id,
         ticker: etf.ticker,
@@ -71,6 +86,8 @@ export async function GET() {
       results.push({
         ticker: etf.ticker,
         status: "success",
+        candlesLoaded: candles.length,
+        lastCandle: marketCandles[marketCandles.length - 1].trading_date,
         analysisDate: analysis?.snapshot.trading_date,
         decision: analysis?.decision.decisionName,
         score: analysis?.decision.score,
@@ -86,15 +103,14 @@ export async function GET() {
     }
   }
 
-    return Response.json({
-    debug: "daily-analysis-range-4999",
-
+  return Response.json({
+    debug: "daily-analysis-pagination-v2",
+    generatedAt: new Date().toISOString(),
     status: "completed",
     totalEtfs: etfs.length,
     successful: results.filter((r) => r.status === "success").length,
     skipped: results.filter((r) => r.status === "skipped").length,
     failed: results.filter((r) => r.status === "error").length,
-
     results,
-    });
+  });
 }
