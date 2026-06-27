@@ -14,19 +14,16 @@ export async function runAdvisorEngine(
   }
 ) {
   const marketPoints = runMarketEngine(candles);
+
   const latestPoint = [...marketPoints]
-  .reverse()
-  .find((point) => point.close !== null);
-
-  console.log(
-  "LATEST POINT",
-  latestPoint.trading_date
-);
-
+    .reverse()
+    .find((point) => point.close !== null);
 
   if (!latestPoint) {
     return null;
   }
+
+  console.log("LATEST POINT", latestPoint.trading_date);
 
   const snapshot = buildTechnicalSnapshot(latestPoint);
   const signals = runSignalEngine(snapshot);
