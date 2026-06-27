@@ -2,6 +2,8 @@ import { calculateSMA, type PricePoint } from "./calculateSMA";
 import { calculateEMA } from "./calculateEMA";
 import { calculateRSI, getRSIZone } from "./calculateRSI";
 import { calculateMACD } from "./calculateMACD";
+import { calculateMomentum } from "./calculateMomentum";
+import { calculateTrend } from "./calculateTrend";
 
 export type MarketCandle = PricePoint & {
   open: number | null;
@@ -29,11 +31,25 @@ export type MarketAnalysisPoint = {
   macd: number | null;
   macdSignal: number | null;
   macdHistogram: number | null;
+
+  change1d: number | null;
+  change5d: number | null;
+  change20d: number | null;
+  change50d: number | null;
+
+  momentumLabel:
+    | "accélération haussière"
+    | "ralentissement"
+    | "pression baissière"
+    | "neutre";
+
+  trendScore: number;
+  trendDirection: "haussier" | "neutre" | "baissier";
+  trendStrength: "faible" | "moyenne" | "forte";
+  trendConfidence: number;
 };
 
-export function runMarketEngine(
-  candles: MarketCandle[]
-): MarketAnalysisPoint[] {
+export function runMarketEngine(candles: MarketCandle[]): MarketAnalysisPoint[] {
   const sorted = [...candles].sort((a, b) =>
     a.trading_date.localeCompare(b.trading_date)
   );
@@ -47,27 +63,53 @@ export function runMarketEngine(
   const ema26 = calculateEMA(sorted, 26);
 
   const rsi14 = calculateRSI(sorted, 14);
-
   const macd = calculateMACD(sorted);
+  const momentum = calculateMomentum(sorted);
 
-  return sorted.map((candle) => ({
-    trading_date: candle.trading_date,
-    close: candle.close,
-    volume: candle.volume,
+  return sorted.map((candle) => {
+    const trend = calculateTrend({
+      sma20: sma20[candle.trading_date] ?? null,
+      sma50: sma50[candle.trading_date] ?? null,
+      sma100: sma100[candle.trading_date] ?? null,
+      sma200: sma200[candle.trading_date] ?? null,
+      ema12: ema12[candle.trading_date] ?? null,
+      ema26: ema26[candle.trading_date] ?? null,
+      rsi14: rsi14[candle.trading_date] ?? null,
+      macd: macd[candle.trading_date]?.macd ?? null,
+      macdSignal: macd[candle.trading_date]?.signal ?? null,
+      momentumLabel: momentum[candle.trading_date]?.momentumLabel ?? "neutre",
+    });
 
-    sma20: sma20[candle.trading_date] ?? null,
-    sma50: sma50[candle.trading_date] ?? null,
-    sma100: sma100[candle.trading_date] ?? null,
-    sma200: sma200[candle.trading_date] ?? null,
+    return {
+      trading_date: candle.trading_date,
+      close: candle.close,
+      volume: candle.volume,
 
-    ema12: ema12[candle.trading_date] ?? null,
-    ema26: ema26[candle.trading_date] ?? null,
+      sma20: sma20[candle.trading_date] ?? null,
+      sma50: sma50[candle.trading_date] ?? null,
+      sma100: sma100[candle.trading_date] ?? null,
+      sma200: sma200[candle.trading_date] ?? null,
 
-    rsi14: rsi14[candle.trading_date] ?? null,
-    rsiZone: getRSIZone(rsi14[candle.trading_date] ?? null),
+      ema12: ema12[candle.trading_date] ?? null,
+      ema26: ema26[candle.trading_date] ?? null,
 
-    macd: macd[candle.trading_date]?.macd ?? null,
-    macdSignal: macd[candle.trading_date]?.signal ?? null,
-    macdHistogram: macd[candle.trading_date]?.histogram ?? null,
-  }));
+      rsi14: rsi14[candle.trading_date] ?? null,
+      rsiZone: getRSIZone(rsi14[candle.trading_date] ?? null),
+
+      macd: macd[candle.trading_date]?.macd ?? null,
+      macdSignal: macd[candle.trading_date]?.signal ?? null,
+      macdHistogram: macd[candle.trading_date]?.histogram ?? null,
+
+      change1d: momentum[candle.trading_date]?.change1d ?? null,
+      change5d: momentum[candle.trading_date]?.change5d ?? null,
+      change20d: momentum[candle.trading_date]?.change20d ?? null,
+      change50d: momentum[candle.trading_date]?.change50d ?? null,
+      momentumLabel: momentum[candle.trading_date]?.momentumLabel ?? "neutre",
+
+      trendScore: trend.trendScore,
+      trendDirection: trend.direction,
+      trendStrength: trend.strength,
+      trendConfidence: trend.confidence,
+    };
+  });
 }

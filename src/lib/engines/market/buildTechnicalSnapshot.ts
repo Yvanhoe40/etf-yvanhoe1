@@ -8,12 +8,28 @@ export type TechnicalSnapshot = {
     shortTerm: "haussier" | "baissier" | "neutre";
     mediumTerm: "haussier" | "baissier" | "neutre";
     longTerm: "haussier" | "baissier" | "neutre";
+    trendScore: number;
+    direction: "haussier" | "neutre" | "baissier";
+    strength: "faible" | "moyenne" | "forte";
+    confidence: number;
   };
 
   momentum: {
     rsi14: number | null;
     rsiZone: "surachat" | "survente" | "neutre" | null;
     macdStatus: "haussier" | "baissier" | "neutre";
+  };
+
+  performance: {
+    change1d: number | null;
+    change5d: number | null;
+    change20d: number | null;
+    change50d: number | null;
+    momentumLabel:
+      | "accélération haussière"
+      | "ralentissement"
+      | "pression baissière"
+      | "neutre";
   };
 
   movingAverages: {
@@ -47,12 +63,24 @@ export function buildTechnicalSnapshot(
       shortTerm: compareValues(point.close, point.sma20),
       mediumTerm: compareValues(point.sma20, point.sma50),
       longTerm: compareValues(point.sma50, point.sma200),
+      trendScore: point.trendScore,
+      direction: point.trendDirection,
+      strength: point.trendStrength,
+      confidence: point.trendConfidence,
     },
 
     momentum: {
       rsi14: point.rsi14,
       rsiZone: point.rsiZone,
       macdStatus,
+    },
+
+    performance: {
+      change1d: point.change1d,
+      change5d: point.change5d,
+      change20d: point.change20d,
+      change50d: point.change50d,
+      momentumLabel: point.momentumLabel,
     },
 
     movingAverages: {
