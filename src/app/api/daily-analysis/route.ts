@@ -55,6 +55,12 @@ export async function GET() {
     }));
 
     try {
+
+      console.log(
+        etf.ticker,
+        marketCandles[marketCandles.length - 1].trading_date
+        );
+        
       const analysis = await runAdvisorEngine(marketCandles, {
         etfId: etf.id,
         ticker: etf.ticker,

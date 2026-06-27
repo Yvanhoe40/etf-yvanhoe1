@@ -16,6 +16,12 @@ export async function runAdvisorEngine(
   const marketPoints = runMarketEngine(candles);
   const latestPoint = marketPoints[marketPoints.length - 1];
 
+  console.log(
+  "LATEST POINT",
+  latestPoint.trading_date
+);
+
+
   if (!latestPoint) {
     return null;
   }
