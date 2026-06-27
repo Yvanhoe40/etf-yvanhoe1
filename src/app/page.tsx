@@ -1955,11 +1955,20 @@ async function loadPortfolioRealizedSummary(
                         </p>
 
                         <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                            Le moteur d'analyse détecte une probabilité importante de correction.
-                            L'ETF est déjà détenu dans votre portefeuille et présente une plus-value
-                            latente de {formatNumber(etf.recommendation.latent_gain_percent)} %.
-                            Une réduction partielle est recommandée afin de sécuriser une partie
-                            des gains tout en conservant une exposition au marché.
+                          La recommandation{" "}
+                          <span className={`font-bold ${recommendationStyle.text}`}>
+                            {etf.recommendation.recommendation_name}
+                          </span>{" "}
+                          est principalement influencée par{" "}
+                          {(etf.recommendationFactors || [])
+                            .slice(0, 3)
+                            .map((factor) => factor.factor_label)
+                            .join(", ")}
+                          . Le score de décision est de{" "}
+                          <span className="font-bold text-cyan-400">
+                            {formatNumber(etf.recommendation.recommendation_confidence, 0)}/100
+                          </span>
+                          .
                         </p>
 
                     </div>

@@ -9,11 +9,25 @@ type Candle = {
   volume: number | null;
 };
 
+async function getExistingCandleCount(etfId: string) {
+  const { count, error } = await supabase
+    .from("etf_ohlcv_daily")
+    .select("*", { count: "exact", head: true })
+    .eq("etf_id", etfId);
+
+  if (error) return 0;
+  return count || 0;
+}
+
 async function collectOneEtf(etf: any) {
+  const existingCount = await getExistingCandleCount(etf.id);
+
+  const range = existingCount < 250 ? "5y" : "1mo";
+
   const response = await fetch(
     `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
       etf.ticker
-    )}?interval=1d&range=1mo`,
+    )}?interval=1d&range=${range}`,
     {
       headers: { "User-Agent": "Mozilla/5.0" },
       cache: "no-store",
@@ -27,6 +41,8 @@ async function collectOneEtf(etf: any) {
     return {
       ticker: etf.ticker,
       status: "error",
+      range,
+      existingCount,
       error: "Yahoo data not found",
       yahooData,
     };
@@ -47,26 +63,38 @@ async function collectOneEtf(etf: any) {
     }))
     .filter((candle: Candle) => candle.close !== null);
 
-  let upsertedCandles = 0;
+  if (candles.length === 0) {
+    return {
+      ticker: etf.ticker,
+      status: "error",
+      range,
+      existingCount,
+      error: "No candle returned by Yahoo",
+    };
+  }
 
-  for (const candle of candles) {
-    const { error: candleError } = await supabase
-      .from("etf_ohlcv_daily")
-      .upsert(
-        {
-          etf_id: etf.id,
-          trading_date: candle.trading_date,
-          open: candle.open,
-          high: candle.high,
-          low: candle.low,
-          close: candle.close,
-          volume: candle.volume,
-          raw_candle: candle,
-        },
-        { onConflict: "etf_id,trading_date" }
-      );
+  const { error: upsertError } = await supabase.from("etf_ohlcv_daily").upsert(
+    candles.map((candle) => ({
+      etf_id: etf.id,
+      trading_date: candle.trading_date,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+      volume: candle.volume,
+      raw_candle: candle,
+    })),
+    { onConflict: "etf_id,trading_date" }
+  );
 
-    if (!candleError) upsertedCandles++;
+  if (upsertError) {
+    return {
+      ticker: etf.ticker,
+      status: "error",
+      range,
+      existingCount,
+      error: upsertError.message,
+    };
   }
 
   const { data: latestCandles, error: latestCandlesError } = await supabase
@@ -80,6 +108,8 @@ async function collectOneEtf(etf: any) {
     return {
       ticker: etf.ticker,
       status: "error",
+      range,
+      existingCount,
       error: latestCandlesError.message,
     };
   }
@@ -88,6 +118,8 @@ async function collectOneEtf(etf: any) {
     return {
       ticker: etf.ticker,
       status: "error",
+      range,
+      existingCount,
       error: "No candle found in database",
     };
   }
@@ -121,6 +153,9 @@ async function collectOneEtf(etf: any) {
       market_status: "COLLECTED",
       raw_quote: {
         source: "Yahoo Finance",
+        mode: range === "5y" ? "historical_bootstrap" : "daily_refresh",
+        range,
+        existingCount,
         meta,
         lastCandle,
         previousCandle,
@@ -131,6 +166,8 @@ async function collectOneEtf(etf: any) {
     return {
       ticker: etf.ticker,
       status: "error",
+      range,
+      existingCount,
       error: snapshotError.message,
     };
   }
@@ -138,11 +175,14 @@ async function collectOneEtf(etf: any) {
   return {
     ticker: etf.ticker,
     status: "success",
+    mode: range === "5y" ? "historical_bootstrap" : "daily_refresh",
+    range,
+    existingCountBefore: existingCount,
+    yahooCandlesReceived: candles.length,
     currentPrice: price,
     previousClose,
     dayChange,
     dayChangePercent,
-    upsertedCandles,
     lastCandle,
     previousCandle,
   };
@@ -175,6 +215,12 @@ export async function GET() {
   return Response.json({
     status: "completed",
     totalEtfs: etfs.length,
+    historicalBootstrap: results.filter(
+      (r) => r.status === "success" && r.range === "5y"
+    ).length,
+    dailyRefresh: results.filter(
+      (r) => r.status === "success" && r.range === "1mo"
+    ).length,
     successful: results.filter((r) => r.status === "success").length,
     failed: results.filter((r) => r.status === "error").length,
     results,
