@@ -2007,69 +2007,135 @@ async function loadPortfolioRealizedSummary(
                   <p className="text-slate-500">Region : {etf.region}</p>
                   <p className="text-slate-500">Topic : {etf.topic || "-"}</p>
 
-                  {etf.latestAnalysis && (
-                    <div className="mt-3 rounded-xl border border-cyan-500/30 bg-slate-950/70 p-4 text-sm shadow-lg">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">
-                            🧠 IA Market Engine V2
-                          </p>
-                          <p className="mt-1 text-2xl font-extrabold text-white">
-                            {etf.latestAnalysis.decision_name}
-                          </p>
+                  {etf.latestAnalysis && (() => {
+                    const decision = etf.latestAnalysis.decision_name || "";
+                    const isBuy = decision.includes("Acheter");
+                    const isHold = decision.includes("Conserver");
+                    const isReduce = decision.includes("Réduire");
+                    const isSell = decision.includes("Vendre");
+
+                    const color =
+                      isBuy ? "emerald" :
+                      isHold ? "cyan" :
+                      isReduce ? "orange" :
+                      isSell ? "red" :
+                      "slate";
+
+                    const borderClass =
+                      color === "emerald" ? "border-emerald-500/40" :
+                      color === "cyan" ? "border-cyan-500/40" :
+                      color === "orange" ? "border-orange-500/40" :
+                      color === "red" ? "border-red-500/40" :
+                      "border-slate-500/40";
+
+                    const textClass =
+                      color === "emerald" ? "text-emerald-300" :
+                      color === "cyan" ? "text-cyan-300" :
+                      color === "orange" ? "text-orange-300" :
+                      color === "red" ? "text-red-300" :
+                      "text-slate-300";
+
+                    const barClass =
+                      color === "emerald" ? "bg-emerald-400" :
+                      color === "cyan" ? "bg-cyan-400" :
+                      color === "orange" ? "bg-orange-400" :
+                      color === "red" ? "bg-red-400" :
+                      "bg-slate-400";
+
+                    const signals = Array.isArray(etf.latestAnalysis.signals)
+                      ? etf.latestAnalysis.signals.slice(0, 4)
+                      : [];
+
+                    return (
+                      <div className={`mt-3 rounded-xl border ${borderClass} bg-slate-950/70 p-4 text-sm shadow-lg`}>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className={`text-xs font-bold uppercase tracking-wide ${textClass}`}>
+                              🧠 IA Market Engine V2
+                            </p>
+                            <p className={`mt-1 text-2xl font-extrabold ${textClass}`}>
+                              {etf.latestAnalysis.decision_name}
+                            </p>
+                          </div>
+
+                          <div className="text-right">
+                            <p className="text-xs text-slate-500">Analyse</p>
+                            <p className={`font-bold ${textClass}`}>
+                              {etf.latestAnalysis.analysis_date}
+                            </p>
+                          </div>
                         </div>
 
-                        <div className="text-right">
-                          <p className="text-xs text-slate-500">Analyse</p>
-                          <p className="font-bold text-cyan-300">
-                            {etf.latestAnalysis.analysis_date}
-                          </p>
+                        <div className="mt-4">
+                          <div className="mb-1 flex justify-between text-xs text-slate-400">
+                            <span>Score décision</span>
+                            <span>{etf.latestAnalysis.decision_score}/100</span>
+                          </div>
+
+                          <div className="h-2 rounded-full bg-slate-700">
+                            <div
+                              className={`h-2 rounded-full ${barClass}`}
+                              style={{
+                                width: `${Math.min(Number(etf.latestAnalysis.decision_score || 0), 100)}%`,
+                              }}
+                            />
+                          </div>
                         </div>
+
+                        <div className="mt-4 grid grid-cols-3 gap-3">
+                          <div className="rounded-lg bg-slate-900/70 p-3">
+                            <p className="text-xs text-slate-500">Trend</p>
+                            <p className="font-bold text-white">
+                              {etf.latestAnalysis.trend_score}/100
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              {etf.latestAnalysis.trend_direction}
+                            </p>
+                          </div>
+
+                          <div className="rounded-lg bg-slate-900/70 p-3">
+                            <p className="text-xs text-slate-500">Force</p>
+                            <p className="font-bold text-white">
+                              {etf.latestAnalysis.trend_strength}
+                            </p>
+                          </div>
+
+                          <div className="rounded-lg bg-slate-900/70 p-3">
+                            <p className="text-xs text-slate-500">Confiance</p>
+                            <p className="font-bold text-white">
+                              {etf.latestAnalysis.decision_confidence}%
+                            </p>
+                          </div>
+                        </div>
+
+                        {signals.length > 0 && (
+                          <div className="mt-4 border-t border-slate-700 pt-3">
+                            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+                              Signaux principaux
+                            </p>
+
+                            <div className="space-y-2">
+                              {signals.map((signal: any, index: number) => (
+                                <div key={`${signal.code}-${index}`} className="rounded-lg bg-slate-900/60 p-2">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="font-semibold text-white">
+                                      {signal.label}
+                                    </p>
+                                    <p className="text-xs text-slate-400">
+                                      {signal.importance}/100
+                                    </p>
+                                  </div>
+                                  <p className="mt-1 text-xs text-slate-400">
+                                    {signal.explanation}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-
-                      <div className="mt-4">
-                        <div className="mb-1 flex justify-between text-xs text-slate-400">
-                          <span>Score décision</span>
-                          <span>{etf.latestAnalysis.decision_score}/100</span>
-                        </div>
-
-                        <div className="h-2 rounded-full bg-slate-700">
-                          <div
-                            className="h-2 rounded-full bg-cyan-400"
-                            style={{
-                              width: `${Math.min(Number(etf.latestAnalysis.decision_score || 0), 100)}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid grid-cols-3 gap-3">
-                        <div className="rounded-lg bg-slate-900/70 p-3">
-                          <p className="text-xs text-slate-500">Trend</p>
-                          <p className="font-bold text-white">
-                            {etf.latestAnalysis.trend_score}/100
-                          </p>
-                          <p className="text-xs text-slate-400">
-                            {etf.latestAnalysis.trend_direction}
-                          </p>
-                        </div>
-
-                        <div className="rounded-lg bg-slate-900/70 p-3">
-                          <p className="text-xs text-slate-500">Force</p>
-                          <p className="font-bold text-white">
-                            {etf.latestAnalysis.trend_strength}
-                          </p>
-                        </div>
-
-                        <div className="rounded-lg bg-slate-900/70 p-3">
-                          <p className="text-xs text-slate-500">Confiance</p>
-                          <p className="font-bold text-white">
-                            {etf.latestAnalysis.decision_confidence}%
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )} 
+                    );
+                  })()}
 
                 </div>
 
