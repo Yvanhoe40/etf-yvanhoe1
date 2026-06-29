@@ -2014,6 +2014,8 @@ async function loadPortfolioRealizedSummary(
                     const isReduce = decision.includes("Réduire");
                     const isSell = decision.includes("Vendre");
 
+                    const decisionIcon = isBuy ? "🟢" : isHold ? "🔵" : isReduce ? "🟠" : isSell ? "🔴" : "⚪";
+
                     const color =
                       isBuy ? "emerald" :
                       isHold ? "cyan" :
@@ -2042,6 +2044,12 @@ async function loadPortfolioRealizedSummary(
                       color === "red" ? "bg-red-400" :
                       "bg-slate-400";
 
+                    const trendDirection = etf.latestAnalysis.trend_direction || "neutre";
+                    const trendIcon =
+                      trendDirection === "haussier" ? "📈" :
+                      trendDirection === "baissier" ? "📉" :
+                      "➡️";
+
                     const signals = Array.isArray(etf.latestAnalysis.signals)
                       ? etf.latestAnalysis.signals.slice(0, 4)
                       : [];
@@ -2054,7 +2062,7 @@ async function loadPortfolioRealizedSummary(
                               🧠 IA Market Engine V2
                             </p>
                             <p className={`mt-1 text-2xl font-extrabold ${textClass}`}>
-                              {etf.latestAnalysis.decision_name}
+                              {decisionIcon} {etf.latestAnalysis.decision_name}
                             </p>
                           </div>
 
@@ -2086,10 +2094,10 @@ async function loadPortfolioRealizedSummary(
                           <div className="rounded-lg bg-slate-900/70 p-3">
                             <p className="text-xs text-slate-500">Trend</p>
                             <p className="font-bold text-white">
-                              {etf.latestAnalysis.trend_score}/100
+                              {trendIcon} {etf.latestAnalysis.trend_score}/100
                             </p>
                             <p className="text-xs text-slate-400">
-                              {etf.latestAnalysis.trend_direction}
+                              {trendDirection}
                             </p>
                           </div>
 
@@ -2115,21 +2123,45 @@ async function loadPortfolioRealizedSummary(
                             </p>
 
                             <div className="space-y-2">
-                              {signals.map((signal: any, index: number) => (
-                                <div key={`${signal.code}-${index}`} className="rounded-lg bg-slate-900/60 p-2">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <p className="font-semibold text-white">
-                                      {signal.label}
-                                    </p>
-                                    <p className="text-xs text-slate-400">
-                                      {signal.importance}/100
+                              {signals.map((signal: any, index: number) => {
+                                const signalColor =
+                                  signal.sentiment === "favorable" ? "bg-emerald-400" :
+                                  signal.sentiment === "vigilance" ? "bg-orange-400" :
+                                  signal.sentiment === "vendeur" ? "bg-red-400" :
+                                  "bg-slate-400";
+
+                                const signalIcon =
+                                  signal.sentiment === "favorable" ? "🟢" :
+                                  signal.sentiment === "vigilance" ? "🟠" :
+                                  signal.sentiment === "vendeur" ? "🔴" :
+                                  "⚪";
+
+                                return (
+                                  <div key={`${signal.code}-${index}`} className="rounded-lg bg-slate-900/60 p-2">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <p className="font-semibold text-white">
+                                        {signalIcon} {signal.label}
+                                      </p>
+                                      <p className="text-xs text-slate-400">
+                                        {signal.importance}/100
+                                      </p>
+                                    </div>
+
+                                    <div className="mt-2 h-1.5 rounded-full bg-slate-700">
+                                      <div
+                                        className={`h-1.5 rounded-full ${signalColor}`}
+                                        style={{
+                                          width: `${Math.min(Number(signal.importance || 0), 100)}%`,
+                                        }}
+                                      />
+                                    </div>
+
+                                    <p className="mt-1 text-xs text-slate-400">
+                                      {signal.explanation}
                                     </p>
                                   </div>
-                                  <p className="mt-1 text-xs text-slate-400">
-                                    {signal.explanation}
-                                  </p>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         )}
