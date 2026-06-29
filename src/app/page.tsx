@@ -2016,12 +2016,7 @@ async function loadPortfolioRealizedSummary(
 
                     const decisionIcon = isBuy ? "🟢" : isHold ? "🔵" : isReduce ? "🟠" : isSell ? "🔴" : "⚪";
 
-                    const color =
-                      isBuy ? "emerald" :
-                      isHold ? "cyan" :
-                      isReduce ? "orange" :
-                      isSell ? "red" :
-                      "slate";
+                    const color = isBuy ? "emerald" : isHold ? "cyan" : isReduce ? "orange" : isSell ? "red" : "slate";
 
                     const borderClass =
                       color === "emerald" ? "border-emerald-500/40" :
@@ -2054,14 +2049,16 @@ async function loadPortfolioRealizedSummary(
                       ? etf.latestAnalysis.signals.slice(0, 4)
                       : [];
 
+                    const summary = etf.latestAnalysis.explanation?.summary;
+
                     return (
-                      <div className={`mt-3 rounded-xl border ${borderClass} bg-slate-950/70 p-4 text-sm shadow-lg`}>
-                        <div className="flex items-center justify-between">
+                      <div className={`mt-4 w-[720px] max-w-full rounded-xl border ${borderClass} bg-slate-950/70 p-4 text-sm shadow-lg`}>
+                        <div className="flex items-start justify-between gap-4">
                           <div>
                             <p className={`text-xs font-bold uppercase tracking-wide ${textClass}`}>
                               🧠 IA Market Engine V2
                             </p>
-                            <p className={`mt-1 text-2xl font-extrabold ${textClass}`}>
+                            <p className={`mt-1 text-3xl font-extrabold ${textClass}`}>
                               {decisionIcon} {etf.latestAnalysis.decision_name}
                             </p>
                           </div>
@@ -2079,40 +2076,34 @@ async function loadPortfolioRealizedSummary(
                             <span>Score décision</span>
                             <span>{etf.latestAnalysis.decision_score}/100</span>
                           </div>
-
-                          <div className="h-2 rounded-full bg-slate-700">
+                          <div className="h-2.5 rounded-full bg-slate-700">
                             <div
-                              className={`h-2 rounded-full ${barClass}`}
-                              style={{
-                                width: `${Math.min(Number(etf.latestAnalysis.decision_score || 0), 100)}%`,
-                              }}
+                              className={`h-2.5 rounded-full ${barClass}`}
+                              style={{ width: `${Math.min(Number(etf.latestAnalysis.decision_score || 0), 100)}%` }}
                             />
                           </div>
                         </div>
 
-                        <div className="mt-4 grid grid-cols-3 gap-3">
+                        <div className="mt-4 grid grid-cols-4 gap-3">
                           <div className="rounded-lg bg-slate-900/70 p-3">
                             <p className="text-xs text-slate-500">Trend</p>
-                            <p className="font-bold text-white">
-                              {trendIcon} {etf.latestAnalysis.trend_score}/100
-                            </p>
-                            <p className="text-xs text-slate-400">
-                              {trendDirection}
-                            </p>
+                            <p className="font-bold text-white">{trendIcon} {etf.latestAnalysis.trend_score}/100</p>
+                            <p className="text-xs text-slate-400">{trendDirection}</p>
                           </div>
 
                           <div className="rounded-lg bg-slate-900/70 p-3">
                             <p className="text-xs text-slate-500">Force</p>
-                            <p className="font-bold text-white">
-                              {etf.latestAnalysis.trend_strength}
-                            </p>
+                            <p className="font-bold text-white">{etf.latestAnalysis.trend_strength}</p>
                           </div>
 
                           <div className="rounded-lg bg-slate-900/70 p-3">
                             <p className="text-xs text-slate-500">Confiance</p>
-                            <p className="font-bold text-white">
-                              {etf.latestAnalysis.decision_confidence}%
-                            </p>
+                            <p className="font-bold text-white">{etf.latestAnalysis.decision_confidence}%</p>
+                          </div>
+
+                          <div className="rounded-lg bg-slate-900/70 p-3">
+                            <p className="text-xs text-slate-500">Signaux</p>
+                            <p className="font-bold text-white">{signals.length}</p>
                           </div>
                         </div>
 
@@ -2122,7 +2113,7 @@ async function loadPortfolioRealizedSummary(
                               Signaux principaux
                             </p>
 
-                            <div className="space-y-2">
+                            <div className="grid gap-2 md:grid-cols-2">
                               {signals.map((signal: any, index: number) => {
                                 const signalColor =
                                   signal.sentiment === "favorable" ? "bg-emerald-400" :
@@ -2139,30 +2130,37 @@ async function loadPortfolioRealizedSummary(
                                 return (
                                   <div key={`${signal.code}-${index}`} className="rounded-lg bg-slate-900/60 p-2">
                                     <div className="flex items-center justify-between gap-3">
-                                      <p className="font-semibold text-white">
-                                        {signalIcon} {signal.label}
+                                      <p className="text-xs font-bold uppercase text-slate-500">
+                                        {signal.category}
                                       </p>
-                                      <p className="text-xs text-slate-400">
-                                        {signal.importance}/100
-                                      </p>
+                                      <p className="text-xs text-slate-400">{signal.importance}/100</p>
                                     </div>
+
+                                    <p className="mt-1 font-semibold text-white">
+                                      {signalIcon} {signal.label}
+                                    </p>
 
                                     <div className="mt-2 h-1.5 rounded-full bg-slate-700">
                                       <div
                                         className={`h-1.5 rounded-full ${signalColor}`}
-                                        style={{
-                                          width: `${Math.min(Number(signal.importance || 0), 100)}%`,
-                                        }}
+                                        style={{ width: `${Math.min(Number(signal.importance || 0), 100)}%` }}
                                       />
                                     </div>
 
-                                    <p className="mt-1 text-xs text-slate-400">
-                                      {signal.explanation}
-                                    </p>
+                                    <p className="mt-1 text-xs text-slate-400">{signal.explanation}</p>
                                   </div>
                                 );
                               })}
                             </div>
+                          </div>
+                        )}
+
+                        {summary && (
+                          <div className="mt-4 rounded-lg border border-slate-700 bg-slate-900/50 p-3">
+                            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                              Explication IA
+                            </p>
+                            <p className="mt-2 text-sm text-slate-300">{summary}</p>
                           </div>
                         )}
                       </div>
