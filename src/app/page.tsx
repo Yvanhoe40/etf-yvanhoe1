@@ -409,6 +409,7 @@ async function loadPortfolioRealizedSummary(
     let transactionData: Transaction[] = [];
     let recommendationData: any[] = [];
     let recommendationFactorData: RecommendationFactor[] = [];
+    let latestAnalysisData: any[] = [];
 
     if (portfolioId) {
       const { data: positions } = await supabase
@@ -435,11 +436,15 @@ async function loadPortfolioRealizedSummary(
         .eq("portfolio_id", portfolioId)
         .order("importance_score", { ascending: false });
 
-      
+      const { data: latestAnalysis } = await supabase
+        .from("latest_etf_analysis")
+        .select("*");
+
       positionData = positions || [];
       transactionData = transactions || [];
       recommendationData = recommendations || [];
       recommendationFactorData = recommendationFactors || [];  
+      latestAnalysisData = latestAnalysis || [];
     }
 
     const snapshotsByEtfId = new Map(
@@ -475,6 +480,10 @@ async function loadPortfolioRealizedSummary(
         );
       });
 
+    const latestAnalysisByEtfId = new Map(
+      latestAnalysisData.map((analysis) => [analysis.etf_id, analysis])
+    );
+
     const merged = (etfData || []).map((etf) => ({
       ...etf,
       snapshot: snapshotsByEtfId.get(etf.id) || null,
@@ -483,6 +492,7 @@ async function loadPortfolioRealizedSummary(
       recommendation: recommendationsByEtfId.get(etf.id) || null,
       recommendationFactors:
         recommendationFactorsByEtfId.get(etf.id) || [],
+      latestAnalysis: latestAnalysisByEtfId.get(etf.id) || null,
     }));
 
     const sorted = merged.sort((a, b) => {
