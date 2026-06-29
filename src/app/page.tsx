@@ -19,6 +19,19 @@ type Etf = {
   currency: string | null;
   region: string;
   topic: string | null;
+  latestAnalysis?: LatestAnalysis | null;
+};
+
+type LatestAnalysis = {
+  etf_id: string;
+  analysis_date: string;
+  decision_name: string;
+  decision_score: number;
+  decision_confidence: number;
+  trend_score: number;
+  trend_direction: string;
+  signals?: any;
+  explanation?: any;
 };
 
 type Snapshot = {
@@ -1992,6 +2005,41 @@ async function loadPortfolioRealizedSummary(
                   <p className="text-slate-500">Currency : {etf.currency || "EUR"}</p>
                   <p className="text-slate-500">Region : {etf.region}</p>
                   <p className="text-slate-500">Topic : {etf.topic || "-"}</p>
+
+                  {etf.latestAnalysis && (
+                    <div className="mt-3 rounded-lg border border-cyan-500/30 bg-slate-900/60 p-3 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Moteur V2</span>
+                        <span className="font-bold text-cyan-300">
+                          {etf.latestAnalysis.analysis_date}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-3 gap-3">
+                        <div>
+                          <p className="text-xs text-slate-500">Décision</p>
+                          <p className="font-bold text-white">
+                            {etf.latestAnalysis.decision_name}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-slate-500">Score décision</p>
+                          <p className="font-bold text-white">
+                            {etf.latestAnalysis.decision_score}/100
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-slate-500">Trend score</p>
+                          <p className="font-bold text-white">
+                            {etf.latestAnalysis.trend_score}/100
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}  
+
                 </div>
 
                 {canEditEtfs && (
