@@ -4,6 +4,7 @@ import { calculateRSI, getRSIZone } from "./calculateRSI";
 import { calculateMACD } from "./calculateMACD";
 import { calculateMomentum } from "./calculateMomentum";
 import { calculateTrend } from "./calculateTrend";
+import { calculateStochastic } from "./calculateStochastic";
 
 export type MarketCandle = PricePoint & {
   open: number | null;
@@ -27,6 +28,10 @@ export type MarketAnalysisPoint = {
 
   rsi14: number | null;
   rsiZone: "surachat" | "survente" | "neutre" | null;
+
+  stochK: number | null;
+  stochD: number | null;
+  stochSignal: "surachat" | "survente" | "haussier" | "baissier" | "neutre";
 
   macd: number | null;
   macdSignal: number | null;
@@ -63,6 +68,7 @@ export function runMarketEngine(candles: MarketCandle[]): MarketAnalysisPoint[] 
   const ema26 = calculateEMA(sorted, 26);
 
   const rsi14 = calculateRSI(sorted, 14);
+  const stochastic = calculateStochastic(sorted);
   const macd = calculateMACD(sorted);
   const momentum = calculateMomentum(sorted);
 
@@ -95,6 +101,10 @@ export function runMarketEngine(candles: MarketCandle[]): MarketAnalysisPoint[] 
 
       rsi14: rsi14[candle.trading_date] ?? null,
       rsiZone: getRSIZone(rsi14[candle.trading_date] ?? null),
+
+      stochK: stochastic[candle.trading_date]?.stochK ?? null,
+      stochD: stochastic[candle.trading_date]?.stochD ?? null,
+      stochSignal: stochastic[candle.trading_date]?.stochSignal ?? "neutre",
 
       macd: macd[candle.trading_date]?.macd ?? null,
       macdSignal: macd[candle.trading_date]?.signal ?? null,
