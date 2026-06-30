@@ -11,10 +11,12 @@ type ForecastResult = {
   decision_level: string | null;
   close_price: number | null;
   analysis_date: string | null;
-  forecast_runs: {
-    forecast_for: string;
-    run_type: string;
-  } | null;
+  forecast_runs:
+    | {
+        forecast_for: string;
+        run_type: string;
+        }[]
+    | null;
 };
 
 function calculateReturn(entryPrice: number, exitPrice: number) {
@@ -119,7 +121,8 @@ export async function GET() {
   const results = [];
 
   for (const forecast of (forecasts || []) as ForecastResult[]) {
-    const forecastFor = forecast.forecast_runs?.forecast_for;
+    const forecastRun = forecast.forecast_runs?.[0];
+    const forecastFor = forecastRun?.forecast_for;
 
     if (!forecastFor || forecast.close_price === null) {
       results.push({
