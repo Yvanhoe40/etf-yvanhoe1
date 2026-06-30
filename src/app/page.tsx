@@ -116,37 +116,11 @@ type Transaction = {
   note: string | null;
 };
 
-type Recommendation = {
-  etf_id: string;
-  portfolio_id: string;
-  recommendation_level: string;
-  recommendation_name: string;
-  recommendation_confidence: number | null;
-  thesis_code: string | null;
-  thesis_confidence: number | null;
-  is_held: boolean | null;
-  latent_gain_percent: number | null;
-  explanation: string | null;
-};
-
-type RecommendationFactor = {
-  recommendation_id: string;
-  etf_id: string;
-  portfolio_id: string;
-  trading_date: string;
-  factor_category: string;
-  factor_label: string;
-  factor_explanation: string;
-  importance_score: number;
-  factor_sentiment: "favorable" | "vigilance" | "vendeur";
-};
-
 type EtfWithSnapshot = Etf & {
   snapshot?: Snapshot | null;
   portfolioPosition?: PortfolioPosition | null;
   transactions?: Transaction[];
-  recommendation?: Recommendation | null;
-  recommendationFactors?: RecommendationFactor[];
+  latestAnalysis?: any | null;
 };
 
 type TransactionForm = {
