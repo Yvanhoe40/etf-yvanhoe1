@@ -18,6 +18,9 @@ export type TechnicalSnapshot = {
     rsi14: number | null;
     rsiZone: "surachat" | "survente" | "neutre" | null;
     macdStatus: "haussier" | "baissier" | "neutre";
+    stochK: number | null;
+    stochD: number | null;
+    stochSignal: "surachat" | "survente" | "haussier" | "baissier" | "neutre";
   };
 
   performance: {
@@ -73,6 +76,9 @@ export function buildTechnicalSnapshot(
       rsi14: point.rsi14,
       rsiZone: point.rsiZone,
       macdStatus,
+      stochK: point.stochK,
+      stochD: point.stochD,
+      stochSignal: point.stochSignal,
     },
 
     performance: {
