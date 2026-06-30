@@ -83,17 +83,6 @@ export async function GET() {
         persist: true,
       });
 
-      if (etf.ticker === "BNKE.PA") {
-        console.log("BNKE DEBUG", {
-          ticker: etf.ticker,
-          candlesLoaded: candles.length,
-          lastCandle: marketCandles[marketCandles.length - 1],
-          snapshot: analysis?.snapshot,
-          signals: analysis?.signals,
-          decision: analysis?.decision,
-        });
-      }
-
       results.push({
         ticker: etf.ticker,
         status: "success",
@@ -115,8 +104,8 @@ export async function GET() {
   }
 
   return Response.json({
-    debug: "daily-analysis-bnke-debug",
     status: "completed",
+    generatedAt: new Date().toISOString(),
     totalEtfs: etfs.length,
     successful: results.filter((r) => r.status === "success").length,
     skipped: results.filter((r) => r.status === "skipped").length,
