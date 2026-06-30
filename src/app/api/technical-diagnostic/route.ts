@@ -69,7 +69,6 @@ export async function GET() {
       ticker: etf.ticker,
       name: etf.name,
       status: "success",
-
       date: latestPoint.trading_date,
       close: latestPoint.close,
       volume: latestPoint.volume,
@@ -81,28 +80,25 @@ export async function GET() {
         sma200: latestPoint.sma200,
         ema12: latestPoint.ema12,
         ema26: latestPoint.ema26,
-
         rsi14: latestPoint.rsi14,
         rsiZone: latestPoint.rsiZone,
-
         stochK: latestPoint.stochK,
         stochD: latestPoint.stochD,
         stochSignal: latestPoint.stochSignal,
-
         macd: latestPoint.macd,
         macdSignal: latestPoint.macdSignal,
         macdHistogram: latestPoint.macdHistogram,
-
         change1d: latestPoint.change1d,
         change5d: latestPoint.change5d,
         change20d: latestPoint.change20d,
         change50d: latestPoint.change50d,
         momentumLabel: latestPoint.momentumLabel,
-
         trendScore: latestPoint.trendScore,
         trendDirection: latestPoint.trendDirection,
         trendStrength: latestPoint.trendStrength,
         trendConfidence: latestPoint.trendConfidence,
+        slopes: latestPoint.slopes,
+      },
 
       signals: signals.map((signal) => ({
         code: signal.code,
