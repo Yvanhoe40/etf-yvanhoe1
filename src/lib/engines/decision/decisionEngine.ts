@@ -29,6 +29,14 @@ function clamp(value: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, value));
 }
 
+function isUp(slope: string) {
+  return slope === "up" || slope === "strong_up";
+}
+
+function isDown(slope: string) {
+  return slope === "down" || slope === "strong_down";
+}
+
 export function runDecisionEngine(
   snapshot: TechnicalSnapshot,
   signals: MarketSignal[]
@@ -53,6 +61,8 @@ export function runDecisionEngine(
   const trendScore = snapshot.trend.trendScore;
   const trendDirection = snapshot.trend.direction;
   const trendStrength = snapshot.trend.strength;
+
+  const slopes = snapshot.slopes;
 
   const priceAboveSma20 =
     close !== null && sma20 !== null ? close >= sma20 : false;
@@ -87,6 +97,21 @@ export function runDecisionEngine(
     trendDirection === "baissier" ||
     (trendScore <= 35 && !sma50AboveSma200);
 
+  const movingAverageSlopePositive =
+    isUp(slopes.sma20) && isUp(slopes.sma50);
+
+  const longTermSlopePositive =
+    isUp(slopes.sma50) && isUp(slopes.sma200);
+
+  const macdImproving =
+    isUp(slopes.macd) || isUp(slopes.macdHistogram);
+
+  const macdDeteriorating =
+    isDown(slopes.macd) || isDown(slopes.macdHistogram);
+
+  const rsiRising = isUp(slopes.rsi14);
+  const rsiFalling = isDown(slopes.rsi14);
+
   const shortTermWeakness =
     !priceAboveSma20 ||
     macdStatus === "baissier" ||
@@ -94,11 +119,18 @@ export function runDecisionEngine(
 
   const overheating = rsiOverbought || stochOverbought || rsiExtreme;
 
+  const healthyPullback =
+    bullishTrend &&
+    longTermSlopePositive &&
+    shortTermWeakness &&
+    !bearishTrend;
+
   const goodEntryTiming =
     bullishTrend &&
     priceAboveSma20 &&
     !overheating &&
-    macdStatus === "haussier";
+    macdStatus === "haussier" &&
+    movingAverageSlopePositive;
 
   let score = 50;
 
@@ -108,14 +140,22 @@ export function runDecisionEngine(
 
   if (sma20AboveSma50) score += 8;
   if (priceAboveSma20) score += 6;
+  if (movingAverageSlopePositive) score += 8;
+  if (longTermSlopePositive) score += 6;
+
   if (macdStatus === "haussier") score += 8;
   if (macdStatus === "baissier") score -= 8;
+  if (macdImproving) score += 6;
+  if (macdDeteriorating) score -= 6;
 
   if (rsiOversold || stochOversold) score += 6;
   if (rsiOverbought || stochOverbought) score -= 6;
   if (rsiHigh) score -= 6;
   if (rsiExtreme) score -= 12;
   if (rsiVeryExtreme) score -= 20;
+
+  if (rsiOverbought && rsiFalling) score += 4;
+  if (rsiOverbought && rsiRising) score -= 4;
 
   if (hasSignal(signals, "MOMENTUM_ACCELERATING")) score += 8;
   if (hasSignal(signals, "MOMENTUM_BEARISH")) score -= 10;
@@ -133,6 +173,10 @@ export function runDecisionEngine(
     decisionLevel = "reduce";
     decisionName = "Réduire";
     score = Math.min(score, 40);
+  } else if (healthyPullback && macdImproving) {
+    decisionLevel = "buy_on_pullback";
+    decisionName = "Acheter sur repli";
+    score = clamp(score, 65, 75);
   } else if (rsiVeryExtreme) {
     decisionLevel = "hold";
     decisionName = "Conserver";
@@ -149,7 +193,7 @@ export function runDecisionEngine(
     decisionLevel = "buy_on_pullback";
     decisionName = "Acheter sur repli";
     score = clamp(score, 65, 75);
-  } else if (strongBullishTrend && shortTermWeakness) {
+  } else if (strongBullishTrend && shortTermWeakness && macdImproving) {
     decisionLevel = "buy_on_pullback";
     decisionName = "Acheter sur repli";
     score = clamp(score, 65, 72);
@@ -165,6 +209,10 @@ export function runDecisionEngine(
     decisionLevel = "buy";
     decisionName = "Acheter";
     score = Math.max(score, 68);
+  } else if (bullishTrend && macdImproving) {
+    decisionLevel = "hold";
+    decisionName = "Conserver";
+    score = clamp(score, 55, 64);
   } else if (bullishTrend) {
     decisionLevel = "hold";
     decisionName = "Conserver";
@@ -189,19 +237,23 @@ export function runDecisionEngine(
     priceAboveSma20,
     sma20AboveSma50,
     sma50AboveSma200,
+    movingAverageSlopePositive,
+    longTermSlopePositive,
     macdStatus === "haussier",
+    macdImproving,
     !overheating,
   ].filter(Boolean).length;
 
   const contradictionCount = [
-    bullishTrend && macdStatus === "baissier",
+    bullishTrend && macdStatus === "baissier" && !macdImproving,
     bullishTrend && !priceAboveSma20,
-    bullishTrend && overheating,
+    bullishTrend && overheating && rsiRising,
     bullishTrend && hasSignal(signals, "MOMENTUM_BEARISH"),
+    bearishTrend,
   ].filter(Boolean).length;
 
   const confidence = clamp(
-    Math.round(confirmationCount * 12 - contradictionCount * 10 + 20)
+    Math.round(confirmationCount * 10 - contradictionCount * 8 + 25)
   );
 
   const mainReasons = [...signals]
