@@ -421,8 +421,6 @@ async function loadPortfolioRealizedSummary(
 
     let positionData: PortfolioPosition[] = [];
     let transactionData: Transaction[] = [];
-    let recommendationData: any[] = [];
-    let recommendationFactorData: RecommendationFactor[] = [];
     let latestAnalysisData: any[] = [];
 
     if (portfolioId) {
@@ -438,26 +436,12 @@ async function loadPortfolioRealizedSummary(
         .order("transaction_date", { ascending: false })
         .order("created_at", { ascending: false });
 
-      const { data: recommendations } = await supabase
-        .from("recommendations")
-        .select("*")
-        .eq("portfolio_id", portfolioId)
-        .order("trading_date", { ascending: false });
-
-      const { data: recommendationFactors } = await supabase
-        .from("recommendation_decision_factor_items")
-        .select("*")
-        .eq("portfolio_id", portfolioId)
-        .order("importance_score", { ascending: false });
-
       const { data: latestAnalysis } = await supabase
         .from("latest_etf_analysis")
         .select("*");
 
       positionData = positions || [];
       transactionData = transactions || [];
-      recommendationData = recommendations || [];
-      recommendationFactorData = recommendationFactors || [];  
       latestAnalysisData = latestAnalysis || [];
     }
 
@@ -474,26 +458,7 @@ async function loadPortfolioRealizedSummary(
       const existing = transactionsByEtfId.get(transaction.etf_id) || [];
       transactionsByEtfId.set(transaction.etf_id, [...existing, transaction]);
     });
-
-    const recommendationsByEtfId = new Map<string, any>();
-      recommendationData.forEach((recommendation) => {
-        recommendationsByEtfId.set(recommendation.etf_id, recommendation);
-});
-    const recommendationFactorsByEtfId = new Map<
-        string,
-        RecommendationFactor[]
-      >();
-
-      recommendationFactorData.forEach((factor) => {
-        const existing =
-          recommendationFactorsByEtfId.get(factor.etf_id) || [];
-
-        recommendationFactorsByEtfId.set(
-          factor.etf_id,
-          [...existing, factor]
-        );
-      });
-
+    
     const latestAnalysisByEtfId = new Map(
       latestAnalysisData.map((analysis) => [analysis.etf_id, analysis])
     );
@@ -503,9 +468,6 @@ async function loadPortfolioRealizedSummary(
       snapshot: snapshotsByEtfId.get(etf.id) || null,
       portfolioPosition: positionsByEtfId.get(etf.id) || null,
       transactions: transactionsByEtfId.get(etf.id) || [],
-      recommendation: recommendationsByEtfId.get(etf.id) || null,
-      recommendationFactors:
-        recommendationFactorsByEtfId.get(etf.id) || [],
       latestAnalysis: latestAnalysisByEtfId.get(etf.id) || null,
     }));
 
