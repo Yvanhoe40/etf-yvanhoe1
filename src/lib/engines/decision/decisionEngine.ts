@@ -21,73 +21,65 @@ export type DecisionResult = {
 };
 
 export function runDecisionEngine(signals: MarketSignal[]): DecisionResult {
-  const favorableScore = signals
-    .filter((s) => s.sentiment === "favorable")
-    .reduce((sum, s) => sum + s.importance, 0);
+  const favorableSignals = signals.filter((s) => s.sentiment === "favorable");
+  const vigilanceSignals = signals.filter((s) => s.sentiment === "vigilance");
+  const sellerSignals = signals.filter((s) => s.sentiment === "vendeur");
 
-  const vigilanceScore = signals
-    .filter((s) => s.sentiment === "vigilance")
-    .reduce((sum, s) => sum + s.importance, 0);
+  const favorableScore = favorableSignals.reduce((sum, s) => sum + s.importance, 0);
+  const vigilanceScore = vigilanceSignals.reduce((sum, s) => sum + s.importance, 0);
+  const sellerScore = sellerSignals.reduce((sum, s) => sum + s.importance, 0);
 
-  const sellerScore = signals
-    .filter((s) => s.sentiment === "vendeur")
-    .reduce((sum, s) => sum + s.importance, 0);
+  const trendSignal = signals.find((s) => s.code === "TREND_BULLISH");
+  const hasStrongBullishTrend = !!trendSignal && trendSignal.importance >= 80;
+  const hasBullishTrend =
+    !!trendSignal || signals.some((s) => s.code === "SMA50_ABOVE_SMA200");
 
-  const hasStrongBullishTrend = signals.some(
-    (s) => s.code === "TREND_BULLISH" && s.importance >= 80
-  );
-
-  const hasBullishTrend = signals.some(
-    (s) => s.code === "TREND_BULLISH" || s.code === "SMA50_ABOVE_SMA200"
-  );
-
-  const hasOverboughtSignal = signals.some(
-    (s) => s.code === "RSI_OVERBOUGHT" || s.code === "STOCH_OVERBOUGHT"
-  );
+  const hasOverbought =
+    signals.some((s) => s.code === "RSI_OVERBOUGHT" || s.code === "STOCH_OVERBOUGHT");
 
   const hasMacdBearish = signals.some((s) => s.code === "MACD_BEARISH");
+  const hasMomentumBearish = signals.some((s) => s.code === "MOMENTUM_BEARISH");
 
-  const hasBearishMomentum = signals.some(
-    (s) =>
-      s.code === "MOMENTUM_BEARISH" ||
-      s.code === "MACD_BEARISH" ||
-      s.code === "STOCH_BEARISH"
-  );
+  const bearishWarningsCount = [
+    hasMacdBearish,
+    hasMomentumBearish,
+    signals.some((s) => s.code === "STOCH_BEARISH"),
+    signals.some((s) => s.code === "PRICE_BELOW_SMA20"),
+  ].filter(Boolean).length;
 
-  const hasMultipleBearishWarnings =
-    signals.filter(
-      (s) =>
-        s.code === "MOMENTUM_BEARISH" ||
-        s.code === "MACD_BEARISH" ||
-        s.code === "STOCH_BEARISH" ||
-        s.code === "PRICE_BELOW_SMA20"
-    ).length >= 2;
+  let score = 50;
 
-  const rawScore = favorableScore - vigilanceScore - sellerScore;
-  let score = Math.max(0, Math.min(100, 50 + rawScore / 5));
+  if (hasStrongBullishTrend) score += 25;
+  else if (hasBullishTrend) score += 15;
+
+  score += Math.min(20, favorableSignals.length * 5);
+
+  if (hasOverbought) score -= 8;
+  if (hasMacdBearish) score -= 8;
+  if (hasMomentumBearish) score -= 10;
+  if (bearishWarningsCount >= 2) score -= 8;
+  if (sellerSignals.length >= 2) score -= 15;
+
+  score = Math.max(0, Math.min(100, score));
 
   let decisionLevel: DecisionLevel = "hold";
   let decisionName = "Conserver";
 
-  if (sellerScore >= 120 || score < 25) {
+  if (sellerSignals.length >= 3 && !hasBullishTrend) {
     decisionLevel = "sell";
     decisionName = "Vendre";
-  } else if (sellerScore >= 70 || score < 40) {
+  } else if (sellerSignals.length >= 2 && bearishWarningsCount >= 2 && !hasStrongBullishTrend) {
     decisionLevel = "reduce";
     decisionName = "Réduire";
-  } else if (hasStrongBullishTrend && hasOverboughtSignal) {
+  } else if (hasStrongBullishTrend && hasOverbought) {
     decisionLevel = "buy_on_pullback";
     decisionName = "Acheter sur repli";
     score = Math.min(score, 75);
-  } else if (hasStrongBullishTrend && hasMacdBearish) {
+  } else if (hasStrongBullishTrend && bearishWarningsCount >= 1) {
     decisionLevel = "buy_on_pullback";
     decisionName = "Acheter sur repli";
     score = Math.min(score, 72);
-  } else if (hasBullishTrend && hasMultipleBearishWarnings) {
-    decisionLevel = "hold";
-    decisionName = "Conserver";
-    score = Math.min(score, 60);
-  } else if (score >= 80 && hasStrongBullishTrend && !hasBearishMomentum && !hasOverboughtSignal) {
+  } else if (score >= 82 && hasStrongBullishTrend && bearishWarningsCount === 0 && !hasOverbought) {
     decisionLevel = "strong_buy";
     decisionName = "Acheter fortement";
   } else if (score >= 65 && hasBullishTrend) {
@@ -96,9 +88,12 @@ export function runDecisionEngine(signals: MarketSignal[]): DecisionResult {
   } else if (score >= 45) {
     decisionLevel = "hold";
     decisionName = "Conserver";
-  } else {
+  } else if (score >= 30) {
     decisionLevel = "reduce";
     decisionName = "Réduire";
+  } else {
+    decisionLevel = "sell";
+    decisionName = "Vendre";
   }
 
   const confidence = Math.min(
