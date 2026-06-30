@@ -11,17 +11,21 @@ function getTomorrowDate() {
   return date.toISOString().slice(0, 10);
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const generatedAt = new Date().toISOString();
+  const { searchParams } = new URL(request.url);
+
+  const runType = searchParams.get("type") ?? "manual";
+  const forecastFor = searchParams.get("forecastFor") ?? getTomorrowDate();
 
   const { data: forecastRun, error: forecastRunError } = await supabase
     .from("forecast_runs")
     .insert({
-      run_type: "manual_daily_analysis",
+      run_type: runType,
       generated_at: generatedAt,
-      forecast_for: getTomorrowDate(),
+      forecast_for: forecastFor,
       engine_version: "2.1.0",
-      market_status: "manual_run",
+      market_status: "generated",
       source: "daily-analysis",
     })
     .select("id")
@@ -126,18 +130,14 @@ export async function GET() {
           run_id: forecastRun.id,
           etf_id: etf.id,
           ticker: etf.ticker,
-
           decision_level: analysis.decision.decisionLevel,
           decision_name: analysis.decision.decisionName,
           decision_score: analysis.decision.score,
           decision_confidence: analysis.decision.confidence,
-
           close_price: analysis.snapshot.close,
           analysis_date: analysis.snapshot.trading_date,
-
           signals: analysis.signals,
           explanation: analysis.explanation,
-
           prediction_horizon: "1d",
           validated: false,
         });
@@ -175,7 +175,8 @@ export async function GET() {
     status: "completed",
     generatedAt,
     forecastRunId: forecastRun.id,
-    forecastFor: getTomorrowDate(),
+    runType,
+    forecastFor,
     totalEtfs: etfs.length,
     successful: results.filter((r) => r.status === "success").length,
     skipped: results.filter((r) => r.status === "skipped").length,
