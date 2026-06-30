@@ -104,13 +104,6 @@ export async function GET() {
         trendStrength: latestPoint.trendStrength,
         trendConfidence: latestPoint.trendConfidence,
 
-        candlePattern: latestPoint.candlePattern,
-        supportLevel: latestPoint.supportLevel,
-        resistanceLevel: latestPoint.resistanceLevel,
-        distanceToSupportPercent: latestPoint.distanceToSupportPercent,
-        distanceToResistancePercent: latestPoint.distanceToResistancePercent,
-      },
-
       signals: signals.map((signal) => ({
         code: signal.code,
         sentiment: signal.sentiment,
