@@ -11,7 +11,11 @@ type ForecastResult = {
   decision_level: string | null;
   close_price: number | null;
   analysis_date: string | null;
-  forecast_runs:
+    forecast_runs:
+    | {
+        forecast_for: string;
+        run_type: string;
+        }
     | {
         forecast_for: string;
         run_type: string;
@@ -122,8 +126,11 @@ const { data: forecasts, error } = await supabase
   const results = [];
 
   for (const forecast of (forecasts || []) as ForecastResult[]) {
-    const forecastRun = forecast.forecast_runs?.[0];
-    const forecastFor = forecastRun?.forecast_for;
+    const forecastRun = Array.isArray(forecast.forecast_runs)
+        ? forecast.forecast_runs[0]
+        : forecast.forecast_runs;
+
+const forecastFor = forecastRun?.forecast_for;
 
     if (!forecastFor || forecast.close_price === null) {
       results.push({
