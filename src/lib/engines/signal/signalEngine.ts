@@ -124,6 +124,50 @@ export function runSignalEngine(snapshot: TechnicalSnapshot): MarketSignal[] {
     });
   }
 
+  if (snapshot.momentum.stochSignal === "surachat") {
+    signals.push({
+      code: "STOCH_OVERBOUGHT",
+      category: "MOMENTUM",
+      sentiment: "vigilance",
+      label: "Stochastique en surachat",
+      explanation: `Le stochastique %K est à ${snapshot.momentum.stochK?.toFixed(2)}.`,
+      importance: 65,
+    });
+  }
+
+  if (snapshot.momentum.stochSignal === "survente") {
+    signals.push({
+      code: "STOCH_OVERSOLD",
+      category: "MOMENTUM",
+      sentiment: "favorable",
+      label: "Stochastique en survente",
+      explanation: `Le stochastique %K est à ${snapshot.momentum.stochK?.toFixed(2)}.`,
+      importance: 65,
+    });
+  }
+
+  if (snapshot.momentum.stochSignal === "haussier") {
+    signals.push({
+      code: "STOCH_BULLISH",
+      category: "MOMENTUM",
+      sentiment: "favorable",
+      label: "Stochastique haussier",
+      explanation: `Le stochastique %K (${snapshot.momentum.stochK?.toFixed(2)}) est au-dessus de %D (${snapshot.momentum.stochD?.toFixed(2)}).`,
+      importance: 45,
+    });
+  }
+
+  if (snapshot.momentum.stochSignal === "baissier") {
+    signals.push({
+      code: "STOCH_BEARISH",
+      category: "MOMENTUM",
+      sentiment: "vigilance",
+      label: "Stochastique baissier",
+      explanation: `Le stochastique %K (${snapshot.momentum.stochK?.toFixed(2)}) est sous %D (${snapshot.momentum.stochD?.toFixed(2)}).`,
+      importance: 45,
+    });
+  }
+
   if (snapshot.momentum.macdStatus === "haussier") {
     signals.push({
       code: "MACD_BULLISH",
