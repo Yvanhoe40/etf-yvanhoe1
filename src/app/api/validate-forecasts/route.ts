@@ -3,6 +3,17 @@ import { supabase } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+type ForecastRunRef =
+  | {
+      forecast_for: string;
+      run_type: string;
+    }
+  | {
+      forecast_for: string;
+      run_type: string;
+    }[]
+  | null;
+
 type ForecastResult = {
   id: string;
   etf_id: string;
@@ -11,16 +22,7 @@ type ForecastResult = {
   decision_level: string | null;
   close_price: number | null;
   analysis_date: string | null;
-    forecast_runs:
-    | {
-        forecast_for: string;
-        run_type: string;
-        }
-    | {
-        forecast_for: string;
-        run_type: string;
-        }[]
-    | null;
+  forecast_runs: ForecastRunRef;
 };
 
 function calculateReturn(entryPrice: number, exitPrice: number) {
@@ -28,24 +30,22 @@ function calculateReturn(entryPrice: number, exitPrice: number) {
   return ((exitPrice - entryPrice) / entryPrice) * 100;
 }
 
-function evaluatePrediction(decisionName: string | null, returnPercent: number | null) {
+function evaluatePrediction(
+  decisionName: string | null,
+  returnPercent: number | null
+) {
   if (returnPercent === null || !decisionName) {
     return { result: "UNKNOWN", score: 0 };
   }
 
   const decision = decisionName.toLowerCase();
 
-  const isBuy =
-    decision.includes("acheter") ||
-    decision.includes("achat");
-
+  const isBuy = decision.includes("acheter") || decision.includes("achat");
   const isSell =
     decision.includes("vendre") ||
     decision.includes("réduire") ||
     decision.includes("reduire");
-
-  const isHold =
-    decision.includes("conserver");
+  const isHold = decision.includes("conserver");
 
   if (isBuy) {
     if (returnPercent > 0.5) return { result: "SUCCESS", score: 100 };
@@ -98,40 +98,60 @@ async function getExitPrice(etfId: string, fromDate: string, offset: number) {
 
 export async function GET(request: Request) {
   const startedAt = new Date();
+  const { searchParams } = new URL(request.url);
 
-const { searchParams } = new URL(request.url);
+  const targetRunId = searchParams.get("runId");
+  const targetDate = searchParams.get("forecastFor");
+  const targetRunType = searchParams.get("type");
 
-const targetDate = searchParams.get("forecastFor");
-const targetRunType = searchParams.get("type");
+  let runQuery = supabase
+    .from("forecast_runs")
+    .select("id, run_type, forecast_for, generated_at")
+    .eq("status", "completed")
+    .order("forecast_for", { ascending: true })
+    .order("generated_at", { ascending: true })
+    .limit(1);
 
-let query = supabase
-  .from("forecast_results")
-  .select(`
-    id,
-    etf_id,
-    ticker,
-    decision_name,
-    decision_level,
-    close_price,
-    analysis_date,
-    run_id,
-    forecast_runs!inner(
-      forecast_for,
-      run_type
-    )
-  `)
-  .eq("validated", false)
-  .not("close_price", "is", null);
+  if (targetRunId) {
+    runQuery = runQuery.eq("id", targetRunId);
+  }
 
-if (targetDate) {
-  query = query.eq("forecast_runs.forecast_for", targetDate);
-}
+  if (targetDate) {
+    runQuery = runQuery.eq("forecast_for", targetDate);
+  }
 
-if (targetRunType) {
-  query = query.eq("forecast_runs.run_type", targetRunType);
-}
+  if (targetRunType) {
+    runQuery = runQuery.eq("run_type", targetRunType);
+  }
 
-const { data: forecasts, error } = await query.limit(500);
+  const { data: nextRun, error: nextRunError } = await runQuery.single();
+
+  if (nextRunError || !nextRun) {
+    return Response.json({
+      status: "nothing_to_validate",
+      reason: nextRunError?.message ?? "No completed forecast run found",
+    });
+  }
+
+  const { data: forecasts, error } = await supabase
+    .from("forecast_results")
+    .select(`
+      id,
+      etf_id,
+      ticker,
+      decision_name,
+      decision_level,
+      close_price,
+      analysis_date,
+      run_id,
+      forecast_runs!inner(
+        forecast_for,
+        run_type
+      )
+    `)
+    .eq("validated", false)
+    .eq("run_id", nextRun.id)
+    .not("close_price", "is", null);
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });
@@ -141,10 +161,10 @@ const { data: forecasts, error } = await query.limit(500);
 
   for (const forecast of (forecasts || []) as ForecastResult[]) {
     const forecastRun = Array.isArray(forecast.forecast_runs)
-        ? forecast.forecast_runs[0]
-        : forecast.forecast_runs;
+      ? forecast.forecast_runs[0]
+      : forecast.forecast_runs;
 
-const forecastFor = forecastRun?.forecast_for;
+    const forecastFor = forecastRun?.forecast_for;
 
     if (!forecastFor || forecast.close_price === null) {
       results.push({
@@ -185,7 +205,9 @@ const forecastFor = forecastRun?.forecast_for;
       ? evaluatePrediction(forecast.decision_name, return5d)
       : { result: null, score: null };
 
-    const return10d = exit10d ? calculateReturn(entryPrice, exit10d.close) : null;
+    const return10d = exit10d
+      ? calculateReturn(entryPrice, exit10d.close)
+      : null;
     const eval10d = exit10d
       ? evaluatePrediction(forecast.decision_name, return10d)
       : { result: null, score: null };
@@ -251,6 +273,9 @@ const forecastFor = forecastRun?.forecast_for;
 
   return Response.json({
     status: "completed",
+    runId: nextRun.id,
+    runType: nextRun.run_type,
+    forecastFor: nextRun.forecast_for,
     startedAt: startedAt.toISOString(),
     completedAt: completedAt.toISOString(),
     durationMs: completedAt.getTime() - startedAt.getTime(),
