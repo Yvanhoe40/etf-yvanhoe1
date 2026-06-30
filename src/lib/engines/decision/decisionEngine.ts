@@ -64,7 +64,9 @@ export function runDecisionEngine(
     sma20 !== null && sma50 !== null ? sma20 > sma50 : false;
 
   const rsiOverbought = rsi !== null && rsi >= 70;
+  const rsiHigh = rsi !== null && rsi >= 75;
   const rsiExtreme = rsi !== null && rsi >= 80;
+  const rsiVeryExtreme = rsi !== null && rsi >= 90;
   const rsiOversold = rsi !== null && rsi <= 30;
 
   const stochOverbought = stochK !== null && stochK >= 80;
@@ -90,8 +92,7 @@ export function runDecisionEngine(
     macdStatus === "baissier" ||
     hasSignal(signals, "MOMENTUM_BEARISH");
 
-  const overheating =
-    rsiOverbought || stochOverbought || rsiExtreme;
+  const overheating = rsiOverbought || stochOverbought || rsiExtreme;
 
   const goodEntryTiming =
     bullishTrend &&
@@ -112,7 +113,9 @@ export function runDecisionEngine(
 
   if (rsiOversold || stochOversold) score += 6;
   if (rsiOverbought || stochOverbought) score -= 6;
-  if (rsiExtreme) score -= 10;
+  if (rsiHigh) score -= 6;
+  if (rsiExtreme) score -= 12;
+  if (rsiVeryExtreme) score -= 20;
 
   if (hasSignal(signals, "MOMENTUM_ACCELERATING")) score += 8;
   if (hasSignal(signals, "MOMENTUM_BEARISH")) score -= 10;
@@ -130,18 +133,34 @@ export function runDecisionEngine(
     decisionLevel = "reduce";
     decisionName = "Réduire";
     score = Math.min(score, 40);
-  } else if (strongBullishTrend && overheating) {
+  } else if (rsiVeryExtreme) {
+    decisionLevel = "hold";
+    decisionName = "Conserver";
+    score = clamp(score, 50, 64);
+  } else if (rsiExtreme) {
+    decisionLevel = "hold";
+    decisionName = "Conserver";
+    score = clamp(score, 50, 64);
+  } else if (strongBullishTrend && rsiOverbought) {
     decisionLevel = "buy_on_pullback";
     decisionName = "Acheter sur repli";
-    score = Math.min(Math.max(score, 65), 75);
+    score = clamp(score, 65, 75);
+  } else if (strongBullishTrend && stochOverbought) {
+    decisionLevel = "buy_on_pullback";
+    decisionName = "Acheter sur repli";
+    score = clamp(score, 65, 75);
   } else if (strongBullishTrend && shortTermWeakness) {
     decisionLevel = "buy_on_pullback";
     decisionName = "Acheter sur repli";
-    score = Math.min(Math.max(score, 65), 72);
+    score = clamp(score, 65, 72);
   } else if (strongBullishTrend && goodEntryTiming) {
     decisionLevel = "strong_buy";
     decisionName = "Acheter fortement";
     score = Math.max(score, 85);
+  } else if (bullishTrend && rsiOverbought) {
+    decisionLevel = "buy_on_pullback";
+    decisionName = "Acheter sur repli";
+    score = clamp(score, 62, 70);
   } else if (bullishTrend && goodEntryTiming) {
     decisionLevel = "buy";
     decisionName = "Acheter";
@@ -150,7 +169,7 @@ export function runDecisionEngine(
     decisionLevel = "hold";
     decisionName = "Conserver";
     score = clamp(score, 50, 64);
-  } else if (score >= 65) {
+  } else if (score >= 65 && !rsiOverbought) {
     decisionLevel = "buy";
     decisionName = "Acheter";
   } else if (score >= 45) {
