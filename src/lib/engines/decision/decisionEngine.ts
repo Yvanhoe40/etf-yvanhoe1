@@ -32,8 +32,31 @@ export function runDecisionEngine(signals: MarketSignal[]): DecisionResult {
     .filter((s) => s.sentiment === "vendeur")
     .reduce((sum, s) => sum + s.importance, 0);
 
+  const hasOverboughtSignal = signals.some(
+    (s) => s.code === "RSI_OVERBOUGHT" || s.code === "STOCH_OVERBOUGHT"
+  );
+
+  const hasStrongBullishTrend = signals.some(
+    (s) => s.code === "TREND_BULLISH" && s.importance >= 80
+  );
+
+  const hasBearishPressure = signals.some(
+    (s) =>
+      s.code === "MOMENTUM_BEARISH" ||
+      s.code === "MACD_BEARISH" ||
+      s.code === "STOCH_BEARISH"
+  );
+
   const rawScore = favorableScore - vigilanceScore - sellerScore;
-  const score = Math.max(0, Math.min(100, 50 + rawScore / 5));
+  let score = Math.max(0, Math.min(100, 50 + rawScore / 5));
+
+  if (hasOverboughtSignal && hasStrongBullishTrend) {
+    score = Math.min(score, 79);
+  }
+
+  if (hasOverboughtSignal && hasBearishPressure) {
+    score = Math.min(score, 65);
+  }
 
   let decisionLevel: DecisionLevel = "hold";
   let decisionName = "Conserver";
@@ -43,10 +66,10 @@ export function runDecisionEngine(signals: MarketSignal[]): DecisionResult {
     decisionName = "Acheter fortement";
   } else if (score >= 65) {
     decisionLevel = "buy";
-    decisionName = "Acheter";
+    decisionName = hasOverboughtSignal ? "Acheter sur repli" : "Acheter";
   } else if (score >= 45) {
     decisionLevel = "hold";
-    decisionName = "Conserver";
+    decisionName = hasOverboughtSignal ? "Conserver / attendre repli" : "Conserver";
   } else if (score >= 30) {
     decisionLevel = "reduce";
     decisionName = "Réduire";
