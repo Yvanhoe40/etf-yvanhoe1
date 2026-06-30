@@ -1687,9 +1687,6 @@ async function loadPortfolioRealizedSummary(
           const position = etf.portfolioPosition;
           const transactions = etf.transactions || [];
           const transactionForm = transactionForms[etf.id];
-          const recommendationStyle = getRecommendationStyle(
-            etf.recommendation?.recommendation_level
-          );
 
           const isPositive = (snapshot?.day_change_percent || 0) >= 0;
           const isGainPositive = (position?.unrealized_gain || 0) >= 0;
@@ -1715,77 +1712,7 @@ async function loadPortfolioRealizedSummary(
             position?.net_invested_amount
               ? (position.unrealized_gain / position.net_invested_amount) * 100
               : null;
-          const facteursFavorables =
-            (etf.recommendationFactors || []).filter(
-              (f) => f.factor_sentiment === "favorable"
-            );
-
-          const facteursVigilance =
-            (etf.recommendationFactors || []).filter(
-              (f) => f.factor_sentiment === "vigilance"
-            );
-
-          const facteursVendeurs =
-            (etf.recommendationFactors || []).filter(
-              (f) => f.factor_sentiment === "vendeur"
-            );
-          const renderFacteurs = (facteurs: RecommendationFactor[]) =>
-            facteurs.map((factor) => (
-              <div
-                key={`${factor.factor_category}-${factor.factor_label}`}
-                className={`rounded-lg border border-slate-700 border-l-4 bg-slate-900/40 p-3 ${
-                  factor.importance_score >= 75
-                    ? "border-l-red-400"
-                    : factor.importance_score >= 50
-                    ? "border-l-orange-400"
-                    : factor.importance_score >= 30
-                    ? "border-l-yellow-400"
-                    : "border-l-slate-500"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="font-semibold text-white">
-                    {factor.factor_category === "PORTEFEUILLE"
-                      ? "💼 "
-                      : factor.factor_category === "TECHNIQUE"
-                      ? "📈 "
-                      : factor.factor_category === "CHANDELIER"
-                      ? "🕯️ "
-                      : "🔎 "}
-                    {factor.factor_label}
-                  </div>
-
-                  <div className="w-56">
-                    <div className="mb-1 flex justify-between text-xs text-slate-400">
-                      <span>Importance</span>
-                      <span>{factor.importance_score}/100</span>
-                    </div>
-
-                    <div className="h-3 rounded-full bg-slate-700">
-                      <div
-                        className={`h-3 rounded-full ${
-                          factor.importance_score >= 75
-                            ? "bg-red-400"
-                            : factor.importance_score >= 50
-                            ? "bg-orange-400"
-                            : factor.importance_score >= 30
-                            ? "bg-yellow-400"
-                            : "bg-slate-500"
-                        }`}
-                        style={{
-                          width: `${Math.min(Number(factor.importance_score || 0), 100)}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-1 text-sm text-slate-300">
-                  {factor.factor_explanation}
-                </div>
-              </div>
-            ));
-
+          
           return (
             <div
               key={etf.id}
