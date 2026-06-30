@@ -14,7 +14,18 @@ export type MarketSignal = {
 export function runSignalEngine(snapshot: TechnicalSnapshot): MarketSignal[] {
   const signals: MarketSignal[] = [];
 
-  if (snapshot.trend.direction === "haussier") {
+  const isBullishTrend = snapshot.trend.direction === "haussier";
+  const isStrongBullishTrend =
+    snapshot.trend.direction === "haussier" &&
+    snapshot.trend.trendScore >= 80 &&
+    snapshot.trend.strength === "forte";
+
+  const isBearishTrend = snapshot.trend.direction === "baissier";
+  const longTermPositive = snapshot.trend.longTerm === "haussier";
+  const shortTermWeak = snapshot.trend.shortTerm === "baissier";
+  const mediumTermPositive = snapshot.trend.mediumTerm === "haussier";
+
+  if (isBullishTrend) {
     signals.push({
       code: "TREND_BULLISH",
       category: "TENDANCE",
@@ -25,29 +36,39 @@ export function runSignalEngine(snapshot: TechnicalSnapshot): MarketSignal[] {
     });
   }
 
-  if (snapshot.trend.direction === "baissier") {
+  if (isBearishTrend) {
     signals.push({
       code: "TREND_BEARISH",
       category: "TENDANCE",
-      sentiment: "vendeur",
-      label: "Tendance globale baissière",
-      explanation: `Le score de tendance est de ${snapshot.trend.trendScore}/100 avec une force ${snapshot.trend.strength}.`,
-      importance: 100 - snapshot.trend.trendScore,
+      sentiment: longTermPositive ? "vigilance" : "vendeur",
+      label: longTermPositive
+        ? "Correction dans une tendance long terme positive"
+        : "Tendance globale baissière",
+      explanation: longTermPositive
+        ? "La tendance court/moyen terme se détériore, mais la tendance long terme reste encore positive."
+        : `Le score de tendance est de ${snapshot.trend.trendScore}/100 avec une force ${snapshot.trend.strength}.`,
+      importance: longTermPositive ? 55 : 100 - snapshot.trend.trendScore,
     });
   }
 
-  if (snapshot.trend.shortTerm === "baissier") {
+  if (shortTermWeak) {
     signals.push({
       code: "PRICE_BELOW_SMA20",
       category: "MOYENNES",
-      sentiment: "vigilance",
-      label: "Cours sous SMA20",
-      explanation: "Le cours évolue sous la moyenne mobile 20 jours.",
-      importance: 60,
+      sentiment: isBullishTrend || longTermPositive ? "vigilance" : "vendeur",
+      label:
+        isBullishTrend || longTermPositive
+          ? "Correction court terme sous SMA20"
+          : "Cours sous SMA20",
+      explanation:
+        isBullishTrend || longTermPositive
+          ? "Le cours passe sous la SMA20, ce qui signale une correction court terme plutôt qu'une cassure de fond."
+          : "Le cours évolue sous la moyenne mobile 20 jours.",
+      importance: isBullishTrend || longTermPositive ? 45 : 60,
     });
   }
 
-  if (snapshot.trend.mediumTerm === "haussier") {
+  if (mediumTermPositive) {
     signals.push({
       code: "SMA20_ABOVE_SMA50",
       category: "MOYENNES",
@@ -58,7 +79,7 @@ export function runSignalEngine(snapshot: TechnicalSnapshot): MarketSignal[] {
     });
   }
 
-  if (snapshot.trend.longTerm === "haussier") {
+  if (longTermPositive) {
     signals.push({
       code: "SMA50_ABOVE_SMA200",
       category: "MOYENNES",
@@ -66,6 +87,24 @@ export function runSignalEngine(snapshot: TechnicalSnapshot): MarketSignal[] {
       label: "Tendance long terme positive",
       explanation: "La SMA50 évolue au-dessus de la SMA200.",
       importance: 70,
+    });
+  }
+
+  if (
+    longTermPositive &&
+    shortTermWeak &&
+    snapshot.momentum.rsi14 !== null &&
+    snapshot.momentum.rsi14 >= 35 &&
+    snapshot.momentum.rsi14 <= 55
+  ) {
+    signals.push({
+      code: "PULLBACK_POTENTIAL",
+      category: "RISQUE",
+      sentiment: "favorable",
+      label: "Pullback potentiel",
+      explanation:
+        "Le recul court terme intervient alors que la tendance long terme reste positive. Cela peut devenir une zone de surveillance pour un point d'entrée.",
+      importance: 55,
     });
   }
 
@@ -84,10 +123,16 @@ export function runSignalEngine(snapshot: TechnicalSnapshot): MarketSignal[] {
     signals.push({
       code: "MOMENTUM_BEARISH",
       category: "MOMENTUM",
-      sentiment: "vendeur",
-      label: "Momentum baissier",
-      explanation: "La dynamique récente montre une pression baissière.",
-      importance: 75,
+      sentiment: isBullishTrend || longTermPositive ? "vigilance" : "vendeur",
+      label:
+        isBullishTrend || longTermPositive
+          ? "Momentum court terme négatif"
+          : "Momentum baissier",
+      explanation:
+        isBullishTrend || longTermPositive
+          ? "La dynamique récente se dégrade, mais la tendance de fond n'est pas nécessairement cassée."
+          : "La dynamique récente montre une pression baissière.",
+      importance: isBullishTrend || longTermPositive ? 55 : 75,
     });
   }
 
@@ -98,7 +143,7 @@ export function runSignalEngine(snapshot: TechnicalSnapshot): MarketSignal[] {
       sentiment: "vigilance",
       label: "Essoufflement de la tendance",
       explanation: "Le rythme de progression ralentit.",
-      importance: 45,
+      importance: isStrongBullishTrend ? 35 : 45,
     });
   }
 
@@ -107,9 +152,13 @@ export function runSignalEngine(snapshot: TechnicalSnapshot): MarketSignal[] {
       code: "RSI_OVERBOUGHT",
       category: "MOMENTUM",
       sentiment: "vigilance",
-      label: "RSI en surachat",
-      explanation: `Le RSI14 est à ${snapshot.momentum.rsi14?.toFixed(2)}.`,
-      importance: 75,
+      label: isStrongBullishTrend
+        ? "RSI en surachat dans tendance forte"
+        : "RSI en surachat",
+      explanation: isStrongBullishTrend
+        ? `Le RSI14 est à ${snapshot.momentum.rsi14?.toFixed(2)}. La tendance reste forte, mais le timing d'achat immédiat devient moins favorable.`
+        : `Le RSI14 est à ${snapshot.momentum.rsi14?.toFixed(2)}.`,
+      importance: isStrongBullishTrend ? 65 : 75,
     });
   }
 
@@ -120,7 +169,7 @@ export function runSignalEngine(snapshot: TechnicalSnapshot): MarketSignal[] {
       sentiment: "favorable",
       label: "RSI en survente",
       explanation: `Le RSI14 est à ${snapshot.momentum.rsi14?.toFixed(2)}.`,
-      importance: 75,
+      importance: isBearishTrend && !longTermPositive ? 45 : 75,
     });
   }
 
@@ -131,7 +180,7 @@ export function runSignalEngine(snapshot: TechnicalSnapshot): MarketSignal[] {
       sentiment: "vigilance",
       label: "Stochastique en surachat",
       explanation: `Le stochastique %K est à ${snapshot.momentum.stochK?.toFixed(2)}.`,
-      importance: 65,
+      importance: isStrongBullishTrend ? 50 : 65,
     });
   }
 
@@ -142,7 +191,7 @@ export function runSignalEngine(snapshot: TechnicalSnapshot): MarketSignal[] {
       sentiment: "favorable",
       label: "Stochastique en survente",
       explanation: `Le stochastique %K est à ${snapshot.momentum.stochK?.toFixed(2)}.`,
-      importance: 65,
+      importance: isBearishTrend && !longTermPositive ? 35 : 65,
     });
   }
 
@@ -164,7 +213,7 @@ export function runSignalEngine(snapshot: TechnicalSnapshot): MarketSignal[] {
       sentiment: "vigilance",
       label: "Stochastique baissier",
       explanation: `Le stochastique %K (${snapshot.momentum.stochK?.toFixed(2)}) est sous %D (${snapshot.momentum.stochD?.toFixed(2)}).`,
-      importance: 45,
+      importance: isBullishTrend || longTermPositive ? 35 : 45,
     });
   }
 
@@ -183,10 +232,16 @@ export function runSignalEngine(snapshot: TechnicalSnapshot): MarketSignal[] {
     signals.push({
       code: "MACD_BEARISH",
       category: "MOMENTUM",
-      sentiment: "vigilance",
-      label: "MACD baissier",
-      explanation: "Le MACD évolue sous sa ligne de signal.",
-      importance: 65,
+      sentiment: isBullishTrend || longTermPositive ? "vigilance" : "vendeur",
+      label:
+        isBullishTrend || longTermPositive
+          ? "MACD baissier court terme"
+          : "MACD baissier",
+      explanation:
+        isBullishTrend || longTermPositive
+          ? "Le MACD passe sous sa ligne de signal, mais la tendance de fond reste à surveiller avant de conclure à une cassure."
+          : "Le MACD évolue sous sa ligne de signal.",
+      importance: isBullishTrend || longTermPositive ? 50 : 65,
     });
   }
 
