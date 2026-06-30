@@ -25,7 +25,7 @@ export async function runAdvisorEngine(
 
   const snapshot = buildTechnicalSnapshot(latestPoint);
   const signals = runSignalEngine(snapshot);
-  const decision = runDecisionEngine(signals);
+  const decision = runDecisionEngine(snapshot, signals);
   const explanation = runExplainEngine(decision);
 
   if (options?.persist && options.etfId && options.ticker) {
