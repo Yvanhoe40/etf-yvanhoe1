@@ -1,4 +1,7 @@
-import type { MarketAnalysisPoint } from "./marketEngine";
+import type {
+  MarketAnalysisPoint,
+  IndicatorSlope,
+} from "./marketEngine";
 
 export type TechnicalSnapshot = {
   trading_date: string;
@@ -20,7 +23,12 @@ export type TechnicalSnapshot = {
     macdStatus: "haussier" | "baissier" | "neutre";
     stochK: number | null;
     stochD: number | null;
-    stochSignal: "surachat" | "survente" | "haussier" | "baissier" | "neutre";
+    stochSignal:
+      | "surachat"
+      | "survente"
+      | "haussier"
+      | "baissier"
+      | "neutre";
   };
 
   performance: {
@@ -40,6 +48,18 @@ export type TechnicalSnapshot = {
     sma50: number | null;
     sma100: number | null;
     sma200: number | null;
+  };
+
+  slopes: {
+    sma20: IndicatorSlope;
+    sma50: IndicatorSlope;
+    sma200: IndicatorSlope;
+    ema12: IndicatorSlope;
+    ema26: IndicatorSlope;
+    rsi14: IndicatorSlope;
+    stochK: IndicatorSlope;
+    macd: IndicatorSlope;
+    macdHistogram: IndicatorSlope;
   };
 };
 
@@ -95,5 +115,7 @@ export function buildTechnicalSnapshot(
       sma100: point.sma100,
       sma200: point.sma200,
     },
+
+    slopes: point.slopes,
   };
 }
