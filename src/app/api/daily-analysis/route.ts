@@ -5,6 +5,30 @@ import type { MarketCandle } from "@/lib/engines/market/marketEngine";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+function getBelgiumDate(offsetDays = 0) {
+  const now = new Date();
+
+  const belgiumDate = new Date(
+    now.toLocaleString("en-US", { timeZone: "Europe/Brussels" })
+  );
+
+  belgiumDate.setDate(belgiumDate.getDate() + offsetDays);
+
+  return belgiumDate.toISOString().slice(0, 10);
+}
+
+function getForecastFor(runType: string) {
+  if (runType === "morning" || runType === "pre_open_eu" || runType === "intraday") {
+    return getBelgiumDate(0);
+  }
+
+  if (runType === "pre_us" || runType === "pre_open_us" || runType === "after_us" || runType === "post_close_us") {
+    return getBelgiumDate(1);
+  }
+
+  return getBelgiumDate(1);
+}
+
 function getTomorrowDate() {
   const date = new Date();
   date.setDate(date.getDate() + 1);
@@ -16,7 +40,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
   const runType = searchParams.get("type") ?? "manual";
-  const forecastFor = searchParams.get("forecastFor") ?? getTomorrowDate();
+  const forecastFor =
+    searchParams.get("forecastFor") ?? getForecastFor(runType);
 
   const { data: forecastRun, error: forecastRunError } = await supabase
     .from("forecast_runs")
