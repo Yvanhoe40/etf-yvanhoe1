@@ -96,10 +96,15 @@ async function getExitPrice(etfId: string, fromDate: string, offset: number) {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const startedAt = new Date();
 
-const { data: forecasts, error } = await supabase
+const { searchParams } = new URL(request.url);
+
+const targetDate = searchParams.get("forecastFor");
+const targetRunType = searchParams.get("type");
+
+let query = supabase
   .from("forecast_results")
   .select(`
     id,
@@ -116,8 +121,17 @@ const { data: forecasts, error } = await supabase
     )
   `)
   .eq("validated", false)
-  .not("close_price", "is", null)
-  .limit(500);
+  .not("close_price", "is", null);
+
+if (targetDate) {
+  query = query.eq("forecast_runs.forecast_for", targetDate);
+}
+
+if (targetRunType) {
+  query = query.eq("forecast_runs.run_type", targetRunType);
+}
+
+const { data: forecasts, error } = await query.limit(500);
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });
