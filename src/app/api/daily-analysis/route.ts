@@ -18,25 +18,31 @@ function getBelgiumDate(offsetDays = 0) {
 }
 
 function getForecastFor(runType: string) {
-  if (runType === "morning" || runType === "pre_open_eu" || runType === "intraday") {
+  if (
+    runType === "morning" ||
+    runType === "pre_open_eu" ||
+    runType === "intraday" ||
+    runType === "intraday_monitor"
+  ) {
     return getBelgiumDate(0);
   }
 
-  if (runType === "pre_us" || runType === "pre_open_us" || runType === "after_us" || runType === "post_close_us") {
+  if (
+    runType === "pre_us" ||
+    runType === "pre_open_us" ||
+    runType === "after_us" ||
+    runType === "post_close_us"
+  ) {
     return getBelgiumDate(1);
   }
 
   return getBelgiumDate(1);
 }
 
-function getTomorrowDate() {
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
-  return date.toISOString().slice(0, 10);
-}
-
 export async function GET(request: Request) {
-  const generatedAt = new Date().toISOString();
+  const startedAt = new Date();
+  const generatedAt = startedAt.toISOString();
+
   const { searchParams } = new URL(request.url);
 
   const runType = searchParams.get("type") ?? "manual";
@@ -52,6 +58,8 @@ export async function GET(request: Request) {
       engine_version: "2.1.0",
       market_status: "generated",
       source: "daily-analysis",
+      status: "running",
+      started_at: generatedAt,
     })
     .select("id")
     .single();
@@ -70,10 +78,26 @@ export async function GET(request: Request) {
     .order("ticker");
 
   if (etfsError) {
+    await supabase
+      .from("forecast_runs")
+      .update({
+        status: "failed",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", forecastRun.id);
+
     return Response.json({ error: etfsError.message }, { status: 500 });
   }
 
   if (!etfs || etfs.length === 0) {
+    await supabase
+      .from("forecast_runs")
+      .update({
+        status: "failed",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", forecastRun.id);
+
     return Response.json({ error: "No active ETF found" }, { status: 404 });
   }
 
@@ -196,16 +220,38 @@ export async function GET(request: Request) {
     }
   }
 
+  const completedAt = new Date();
+  const durationMs = completedAt.getTime() - startedAt.getTime();
+
+  const successful = results.filter((r) => r.status === "success").length;
+  const skipped = results.filter((r) => r.status === "skipped").length;
+  const failed = results.filter((r) => r.status === "error").length;
+
+  await supabase
+    .from("forecast_runs")
+    .update({
+      status: failed > 0 ? "completed_with_errors" : "completed",
+      completed_at: completedAt.toISOString(),
+      duration_ms: durationMs,
+      total_etfs: etfs.length,
+      successful_etfs: successful,
+      skipped_etfs: skipped,
+      failed_etfs: failed,
+    })
+    .eq("id", forecastRun.id);
+
   return Response.json({
-    status: "completed",
+    status: failed > 0 ? "completed_with_errors" : "completed",
     generatedAt,
+    completedAt: completedAt.toISOString(),
+    durationMs,
     forecastRunId: forecastRun.id,
     runType,
     forecastFor,
     totalEtfs: etfs.length,
-    successful: results.filter((r) => r.status === "success").length,
-    skipped: results.filter((r) => r.status === "skipped").length,
-    failed: results.filter((r) => r.status === "error").length,
+    successful,
+    skipped,
+    failed,
     results,
   });
 }
