@@ -5,6 +5,7 @@ import { calculateMACD } from "./calculateMACD";
 import { calculateMomentum } from "./calculateMomentum";
 import { calculateTrend } from "./calculateTrend";
 import { calculateStochastic } from "./calculateStochastic";
+import { calculateMarketEvents } from "./calculateMarketEvents";
 
 export type MarketCandle = PricePoint & {
   open: number | null;
@@ -36,6 +37,23 @@ export type MarketAnalysisPoint = {
   macd: number | null;
   macdSignal: number | null;
   macdHistogram: number | null;
+
+  macdCross: "bullish_cross" | "bearish_cross" | "none";
+  stochCross: "bullish_cross" | "bearish_cross" | "none";
+  maCross: "golden_cross" | "death_cross" | "none";
+
+  candlePattern:
+    | "doji"
+    | "hammer"
+    | "shooting_star"
+    | "bullish_engulfing"
+    | "bearish_engulfing"
+    | "none";
+
+  supportLevel: number | null;
+  resistanceLevel: number | null;
+  distanceToSupportPercent: number | null;
+  distanceToResistancePercent: number | null;
 
   change1d: number | null;
   change5d: number | null;
@@ -72,7 +90,17 @@ export function runMarketEngine(candles: MarketCandle[]): MarketAnalysisPoint[] 
   const macd = calculateMACD(sorted);
   const momentum = calculateMomentum(sorted);
 
+  const events = calculateMarketEvents({
+    candles: sorted,
+    sma50,
+    sma200,
+    macd,
+    stochastic,
+  });
+
   return sorted.map((candle) => {
+    const event = events[candle.trading_date];
+
     const trend = calculateTrend({
       sma20: sma20[candle.trading_date] ?? null,
       sma50: sma50[candle.trading_date] ?? null,
@@ -109,6 +137,17 @@ export function runMarketEngine(candles: MarketCandle[]): MarketAnalysisPoint[] 
       macd: macd[candle.trading_date]?.macd ?? null,
       macdSignal: macd[candle.trading_date]?.signal ?? null,
       macdHistogram: macd[candle.trading_date]?.histogram ?? null,
+
+      macdCross: event?.macdCross ?? "none",
+      stochCross: event?.stochCross ?? "none",
+      maCross: event?.maCross ?? "none",
+
+      candlePattern: event?.candlePattern ?? "none",
+
+      supportLevel: event?.supportLevel ?? null,
+      resistanceLevel: event?.resistanceLevel ?? null,
+      distanceToSupportPercent: event?.distanceToSupportPercent ?? null,
+      distanceToResistancePercent: event?.distanceToResistancePercent ?? null,
 
       change1d: momentum[candle.trading_date]?.change1d ?? null,
       change5d: momentum[candle.trading_date]?.change5d ?? null,
