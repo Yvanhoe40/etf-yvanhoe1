@@ -5,7 +5,35 @@ import type { MarketCandle } from "@/lib/engines/market/marketEngine";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+function getTomorrowDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
 export async function GET() {
+  const generatedAt = new Date().toISOString();
+
+  const { data: forecastRun, error: forecastRunError } = await supabase
+    .from("forecast_runs")
+    .insert({
+      run_type: "manual_daily_analysis",
+      generated_at: generatedAt,
+      forecast_for: getTomorrowDate(),
+      engine_version: "2.1.0",
+      market_status: "manual_run",
+      source: "daily-analysis",
+    })
+    .select("id")
+    .single();
+
+  if (forecastRunError || !forecastRun) {
+    return Response.json(
+      { error: forecastRunError?.message || "Unable to create forecast run" },
+      { status: 500 }
+    );
+  }
+
   const { data: etfs, error: etfsError } = await supabase
     .from("etfs")
     .select("*")
@@ -83,16 +111,56 @@ export async function GET() {
         persist: true,
       });
 
+      if (!analysis) {
+        results.push({
+          ticker: etf.ticker,
+          status: "skipped",
+          error: "No analysis generated",
+        });
+        continue;
+      }
+
+      const { error: forecastResultError } = await supabase
+        .from("forecast_results")
+        .insert({
+          run_id: forecastRun.id,
+          etf_id: etf.id,
+          ticker: etf.ticker,
+
+          decision_level: analysis.decision.decisionLevel,
+          decision_name: analysis.decision.decisionName,
+          decision_score: analysis.decision.score,
+          decision_confidence: analysis.decision.confidence,
+
+          close_price: analysis.snapshot.close,
+          analysis_date: analysis.snapshot.trading_date,
+
+          signals: analysis.signals,
+          explanation: analysis.explanation,
+
+          prediction_horizon: "1d",
+          validated: false,
+        });
+
+      if (forecastResultError) {
+        results.push({
+          ticker: etf.ticker,
+          status: "error",
+          error: forecastResultError.message,
+        });
+        continue;
+      }
+
       results.push({
         ticker: etf.ticker,
         status: "success",
         candlesLoaded: candles.length,
         lastCandle: marketCandles[marketCandles.length - 1].trading_date,
-        analysisDate: analysis?.snapshot.trading_date,
-        decision: analysis?.decision.decisionName,
-        score: analysis?.decision.score,
-        confidence: analysis?.decision.confidence,
-        signals: analysis?.signals.length,
+        analysisDate: analysis.snapshot.trading_date,
+        decision: analysis.decision.decisionName,
+        score: analysis.decision.score,
+        confidence: analysis.decision.confidence,
+        signals: analysis.signals.length,
       });
     } catch (error) {
       results.push({
@@ -105,7 +173,9 @@ export async function GET() {
 
   return Response.json({
     status: "completed",
-    generatedAt: new Date().toISOString(),
+    generatedAt,
+    forecastRunId: forecastRun.id,
+    forecastFor: getTomorrowDate(),
     totalEtfs: etfs.length,
     successful: results.filter((r) => r.status === "success").length,
     skipped: results.filter((r) => r.status === "skipped").length,
