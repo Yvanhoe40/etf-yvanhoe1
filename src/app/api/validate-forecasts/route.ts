@@ -95,24 +95,25 @@ async function getExitPrice(etfId: string, fromDate: string, offset: number) {
 export async function GET() {
   const startedAt = new Date();
 
-  const { data: forecasts, error } = await supabase
-    .from("forecast_results")
-    .select(`
-      id,
-      etf_id,
-      ticker,
-      decision_name,
-      decision_level,
-      close_price,
-      analysis_date,
-      forecast_runs (
-        forecast_for,
-        run_type
-      )
-    `)
-    .eq("validated", false)
-    .not("close_price", "is", null)
-    .limit(500);
+const { data: forecasts, error } = await supabase
+  .from("forecast_results")
+  .select(`
+    id,
+    etf_id,
+    ticker,
+    decision_name,
+    decision_level,
+    close_price,
+    analysis_date,
+    run_id,
+    forecast_runs!inner(
+      forecast_for,
+      run_type
+    )
+  `)
+  .eq("validated", false)
+  .not("close_price", "is", null)
+  .limit(500);
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });
