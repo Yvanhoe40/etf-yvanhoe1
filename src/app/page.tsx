@@ -188,6 +188,8 @@ export default function Home() {
   const [portfolioRealizedSummary, setPortfolioRealizedSummary] =
   useState<PortfolioRealizedSummary | null>(null);
 
+  const [portfolioConcentration, setPortfolioConcentration] = useState<any>(null);
+
   const [allocationByRegion, setAllocationByRegion] = useState<any[]>([]);
   const [allocationByTopic, setAllocationByTopic] = useState<any[]>([]);
 
@@ -316,6 +318,7 @@ async function loadPortfolioSummary(portfolioId: string | null) {
     .maybeSingle();
 
   setPortfolioSummary(data || null);
+  setPortfolioConcentration(concentrationData || null);
 }
 
   async function loadTargetAllocations(portfolioId: string) {
@@ -432,6 +435,12 @@ async function loadPortfolioRealizedSummary(
         .order("transaction_date", { ascending: false })
         .order("created_at", { ascending: false });
 
+      const { data: concentrationData } = await supabase
+        .from("portfolio_concentration_score")
+        .select("*")
+        .eq("portfolio_id", portfolioId)
+        .maybeSingle();
+
       const { data: latestAnalysis } = await supabase
         .from("latest_etf_analysis")
         .select("*");
@@ -440,6 +449,7 @@ async function loadPortfolioRealizedSummary(
       transactionData = transactions || [];
       latestAnalysisData = latestAnalysis || [];
     }
+
 
     const snapshotsByEtfId = new Map(
       (snapshotData || []).map((snapshot) => [snapshot.etf_id, snapshot])
@@ -1275,6 +1285,51 @@ async function loadPortfolioRealizedSummary(
                   </div>
                 </div>
               </div>
+
+            {portfolioConcentration && (
+              <div className="mb-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
+                <h2 className="mb-4 text-2xl font-semibold">
+                  Concentration du portefeuille
+                </h2>
+
+                <div className="grid gap-4 md:grid-cols-4">
+                  <div className="rounded-lg bg-slate-800 p-4">
+                    <p className="text-sm text-slate-400">Top 1 ETF</p>
+                    <p className="text-2xl font-bold">
+                      {Number(portfolioConcentration.top1_weight || 0).toFixed(2)}%
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-slate-800 p-4">
+                    <p className="text-sm text-slate-400">Top 3 ETF</p>
+                    <p className="text-2xl font-bold">
+                      {Number(portfolioConcentration.top3_weight || 0).toFixed(2)}%
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-slate-800 p-4">
+                    <p className="text-sm text-slate-400">Top 5 ETF</p>
+                    <p className="text-2xl font-bold">
+                      {Number(portfolioConcentration.top5_weight || 0).toFixed(2)}%
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-slate-800 p-4">
+                    <p className="text-sm text-slate-400">Nombre d’ETF</p>
+                    <p className="text-2xl font-bold">
+                      {portfolioConcentration.holdings_count}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-lg bg-slate-800 p-4">
+                  <p className="text-sm text-slate-400">Diagnostic</p>
+                  <p className="text-xl font-bold text-emerald-400">
+                    {portfolioConcentration.concentration_level}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {activePortfolio && portfolioSummary && openPositions.length > 0 && (
               <div className="mb-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
