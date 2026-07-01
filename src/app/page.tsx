@@ -318,7 +318,6 @@ async function loadPortfolioSummary(portfolioId: string | null) {
     .maybeSingle();
 
   setPortfolioSummary(data || null);
-  setPortfolioConcentration(concentrationData || null);
 }
 
   async function loadTargetAllocations(portfolioId: string) {
@@ -441,6 +440,8 @@ async function loadPortfolioRealizedSummary(
         .eq("portfolio_id", portfolioId)
         .maybeSingle();
 
+        setPortfolioConcentration(concentrationData || null);
+
       const { data: latestAnalysis } = await supabase
         .from("latest_etf_analysis")
         .select("*");
@@ -524,8 +525,10 @@ async function loadPortfolioRealizedSummary(
     setTargetAllocations([]);
     setAllocationByRegion([]);
     setAllocationByTopic([]);
+    setPortfolioConcentration(null);
     await loadEtfs(null);
   }
+
 
   async function refreshMarketData() {
     if (!canEditEtfs) return;
