@@ -1172,9 +1172,20 @@ async function loadPortfolioRealizedSummary(
                       </Pie>
 
                       <Tooltip
-                        formatter={(value) =>
-                          `${formatNumber(Number(value || 0))} EUR`
-                        }
+                        formatter={(value, name) => {
+                          const total = allocationByRegion.reduce(
+                            (sum, item) => sum + Number(item.current_value || 0),
+                            0
+                          );
+
+                          const percent =
+                            total > 0 ? (Number(value || 0) / total) * 100 : 0;
+
+                          return [
+                            `${formatNumber(Number(value || 0))} EUR (${percent.toFixed(2)}%)`,
+                            name,
+                          ];
+                        }}
                       />
                     </PieChart>
                   </div>
@@ -1245,9 +1256,20 @@ async function loadPortfolioRealizedSummary(
                       </Pie>
 
                       <Tooltip
-                        formatter={(value) =>
-                          `${formatNumber(Number(value || 0))} EUR`
-                        }
+                        formatter={(value, name) => {
+                          const total = allocationByRegion.reduce(
+                            (sum, item) => sum + Number(item.current_value || 0),
+                            0
+                          );
+
+                          const percent =
+                            total > 0 ? (Number(value || 0) / total) * 100 : 0;
+
+                          return [
+                            `${formatNumber(Number(value || 0))} EUR (${percent.toFixed(2)}%)`,
+                            name,
+                          ];
+                        }}
                       />
                     </PieChart>
                   </div>
