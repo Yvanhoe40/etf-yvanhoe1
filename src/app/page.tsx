@@ -187,6 +187,10 @@ export default function Home() {
   useState<PortfolioSummary | null>(null);
   const [portfolioRealizedSummary, setPortfolioRealizedSummary] =
   useState<PortfolioRealizedSummary | null>(null);
+
+  const [allocationByRegion, setAllocationByRegion] = useState<any[]>([]);
+  const [allocationByTopic, setAllocationByTopic] = useState<any[]>([]);
+
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [transactionForms, setTransactionForms] = useState<
@@ -343,6 +347,24 @@ async function loadPortfolioSummary(portfolioId: string | null) {
 
   }
 
+  async function loadAllocationByRegion(portfolioId: string) {
+    const { data } = await supabase
+      .from("portfolio_allocation_by_region")
+      .select("*")
+      .eq("portfolio_id", portfolioId);
+
+    setAllocationByRegion(data || []);
+  }
+
+  async function loadAllocationByTopic(portfolioId: string) {
+    const { data } = await supabase
+      .from("portfolio_allocation_by_topic")
+      .select("*")
+      .eq("portfolio_id", portfolioId);
+
+    setAllocationByTopic(data || []);
+  }
+
   async function saveTargetAllocations() {
     if (!activePortfolio) return;
 
@@ -479,6 +501,8 @@ async function loadPortfolioRealizedSummary(
     await loadPortfolioSummary(data.id);
     await loadPortfolioRealizedSummary(data.id);
     await loadTargetAllocations(data.id);
+    await loadAllocationByRegion(data.id);
+    await loadAllocationByTopic(data.id);
   }
 
   async function disconnectPortfolio() {
@@ -488,6 +512,8 @@ async function loadPortfolioRealizedSummary(
     setPortfolioSummary(null);
     setPortfolioRealizedSummary(null);
     setTargetAllocations([]);
+    setAllocationByRegion([]);
+    setAllocationByTopic([]);
     await loadEtfs(null);
   }
 
@@ -1116,121 +1142,117 @@ async function loadPortfolioRealizedSummary(
               </div>
             )}
 
-          <div className="mb-8 grid gap-6 lg:grid-cols-2">
-            <div className="rounded-xl border border-slate-700 bg-slate-900 p-6">
-              <h2 className="mb-4 text-2xl font-semibold">
-                Allocation par région
-              </h2>
+              <div className="mb-8 grid gap-6 lg:grid-cols-2">
+                <div className="rounded-xl border border-slate-700 bg-slate-900 p-6">
+                  <h2 className="mb-4 text-2xl font-semibold">
+                    Allocation par région
+                  </h2>
 
-              <div className="flex h-80 min-h-[320px] w-full justify-center">
-                <PieChart width={320} height={320}>
-                    <Pie
-                      data={buildAllocation(openPositions, "region", portfolioSummary?.current_value || 0).map((item) => ({
-                      name: item.label,
-                      value: item.value,
-                    }))}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={65}
-                      outerRadius={110}
-                      label={false}
-                    
-                    >
-                      {buildAllocation(openPositions, "region", portfolioSummary?.current_value || 0).map((_, index) => (
-                        <Cell
-                          key={index}
-                          fill={chartColors[index % chartColors.length]}
-                        />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                    formatter={(value) =>
-                     `${formatNumber(Number(value || 0))} EUR`
-                    }
-                  />
-                </PieChart>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-700 bg-slate-900 p-6">
-              <h2 className="mb-4 text-2xl font-semibold">
-                Allocation par thème
-              </h2>
-
-              <div className="flex h-80 min-h-[320px] w-full justify-center">
-                <PieChart width={320} height={320}>
-                    <Pie
-
-                    data={(() => {
-                      const items = buildAllocation(
-                        openPositions,
-                        "topic",
-                        portfolioSummary?.current_value || 0
-                      );
-
-                      const top5 = items.slice(0, 5);
-
-                      const othersValue = items
-                        .slice(5)
-                        .reduce((sum, item) => sum + item.value, 0);
-
-                      const finalItems =
-                        othersValue > 0
-                          ? [...top5, { label: "Autres", value: othersValue }]
-                          : top5;
-
-                      return finalItems.map((item) => ({
-                        name: item.label,
-                        value: item.value,
-                      }));
-                    })()}
-
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={65}
-                      outerRadius={110}
-                      label={false}
-                  
-                    >
-                      {(() => {
-                        const items = buildAllocation(
-                          openPositions,
-                          "topic",
-                          portfolioSummary?.current_value || 0
-                        );
-
-                        const top5 = items.slice(0, 5);
-
-                        const othersValue = items
-                          .slice(5)
-                          .reduce((sum, item) => sum + item.value, 0);
-
-                        const finalItems =
-                          othersValue > 0
-                            ? [...top5, { label: "Autres", value: othersValue }]
-                            : top5;
-
-                        return finalItems.map((_, index) => (
+                  <div className="flex h-80 min-h-[320px] w-full justify-center">
+                    <PieChart width={320} height={320}>
+                      <Pie
+                        data={allocationByRegion.map((item) => ({
+                          name: item.region,
+                          value: Number(item.current_value || 0),
+                        }))}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={65}
+                        outerRadius={110}
+                        label={false}
+                      >
+                        {allocationByRegion.map((_, index) => (
                           <Cell
                             key={index}
                             fill={chartColors[index % chartColors.length]}
                           />
-                        ));
-                      })()}
-                    </Pie>
-                    <Tooltip
-                    formatter={(value) =>
-                    `${formatNumber(Number(value || 0))} EUR`
-                    }
-                  />
-                </PieChart>
+                        ))}
+                      </Pie>
+
+                      <Tooltip
+                        formatter={(value) =>
+                          `${formatNumber(Number(value || 0))} EUR`
+                        }
+                      />
+                    </PieChart>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-700 bg-slate-900 p-6">
+                  <h2 className="mb-4 text-2xl font-semibold">
+                    Allocation par thème
+                  </h2>
+
+                  <div className="flex h-80 min-h-[320px] w-full justify-center">
+                    <PieChart width={320} height={320}>
+                      <Pie
+                        data={(() => {
+                          const items = allocationByTopic.map((item) => ({
+                            label: item.topic,
+                            value: Number(item.current_value || 0),
+                          }));
+
+                          const top5 = items.slice(0, 5);
+
+                          const othersValue = items
+                            .slice(5)
+                            .reduce((sum, item) => sum + item.value, 0);
+
+                          const finalItems =
+                            othersValue > 0
+                              ? [...top5, { label: "Autres", value: othersValue }]
+                              : top5;
+
+                          return finalItems.map((item) => ({
+                            name: item.label,
+                            value: item.value,
+                          }));
+                        })()}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={65}
+                        outerRadius={110}
+                        label={false}
+                      >
+                        {(() => {
+                          const items = allocationByTopic.map((item) => ({
+                            label: item.topic,
+                            value: Number(item.current_value || 0),
+                          }));
+
+                          const top5 = items.slice(0, 5);
+
+                          const othersValue = items
+                            .slice(5)
+                            .reduce((sum, item) => sum + item.value, 0);
+
+                          const finalItems =
+                            othersValue > 0
+                              ? [...top5, { label: "Autres", value: othersValue }]
+                              : top5;
+
+                          return finalItems.map((_, index) => (
+                            <Cell
+                              key={index}
+                              fill={chartColors[index % chartColors.length]}
+                            />
+                          ));
+                        })()}
+                      </Pie>
+
+                      <Tooltip
+                        formatter={(value) =>
+                          `${formatNumber(Number(value || 0))} EUR`
+                        }
+                      />
+                    </PieChart>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
             {activePortfolio && portfolioSummary && openPositions.length > 0 && (
               <div className="mb-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
