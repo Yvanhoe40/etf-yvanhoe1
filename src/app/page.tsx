@@ -399,7 +399,7 @@ async function loadPortfolioRealizedSummary(
 
     if (portfolioId) {
       const { data: positions } = await supabase
-        .from("etf_portfolio_positions")
+        .from("etf_portfolio_positions_from_transactions")
         .select("*")
         .eq("portfolio_id", portfolioId);
 
