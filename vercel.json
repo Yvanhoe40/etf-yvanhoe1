@@ -1,20 +1,24 @@
 {
   "crons": [
     {
-      "path": "/api/collect-market-data",
-      "schedule": "15 7 * * 1-5"
+      "path": "/api/validate-forecasts",
+      "schedule": "20 6 * * 1-5"
+    },
+    {
+      "path": "/api/daily-analysis?type=morning",
+      "schedule": "30 6 * * 1-5"
     },
     {
       "path": "/api/collect-market-data",
-      "schedule": "0 10 * * 1-5"
+      "schedule": "15 7-16 * * 1-5"
     },
     {
-      "path": "/api/collect-market-data",
-      "schedule": "45 14 * * 1-5"
+      "path": "/api/daily-analysis?type=pre_us",
+      "schedule": "15 13 * * 1-5"
     },
     {
-      "path": "/api/collect-market-data",
-      "schedule": "15 16 * * 1-5"
+      "path": "/api/daily-analysis?type=after_us",
+      "schedule": "45 20 * * 1-5"
     }
   ]
 }

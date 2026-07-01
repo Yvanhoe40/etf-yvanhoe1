@@ -39,6 +39,69 @@ function getForecastFor(runType: string) {
   return getBelgiumDate(1);
 }
 
+function getRecommendationMetadata(runType: string, forecastFor: string) {
+  if (runType === "morning") {
+    return {
+      recommendationMoment: "morning",
+      recommendationTarget: "Today",
+      recommendationValidity: `Valable pour la séance du ${forecastFor}.`,
+    };
+  }
+
+  if (runType === "pre_us" || runType === "pre_open_us") {
+    return {
+      recommendationMoment: "pre_us",
+      recommendationTarget: "Today Close + Tomorrow",
+      recommendationValidity: `Révision intraday valable pour la fin de séance européenne du ${getBelgiumDate(
+        0
+      )} et pour la préparation de la séance du ${forecastFor}.`,
+    };
+  }
+
+  if (runType === "after_us" || runType === "post_close_us") {
+    return {
+      recommendationMoment: "after_us",
+      recommendationTarget: "Tomorrow",
+      recommendationValidity: `Valable pour la séance européenne du ${forecastFor}, après clôture américaine.`,
+    };
+  }
+
+  if (runType === "pre_open_eu") {
+    return {
+      recommendationMoment: "pre_open_eu",
+      recommendationTarget: "Today Open",
+      recommendationValidity: `Ultime validation avant ouverture européenne pour la séance du ${forecastFor}.`,
+    };
+  }
+
+  return {
+    recommendationMoment: runType,
+    recommendationTarget: "Tomorrow",
+    recommendationValidity: `Valable pour la séance du ${forecastFor}.`,
+  };
+}
+
+function buildRecommendationContext(analysis: any) {
+  const decisionName = analysis?.decision?.decisionName ?? "Conserver";
+  const score = analysis?.decision?.score ?? 0;
+  const confidence = analysis?.decision?.confidence ?? 0;
+  const signals = analysis?.signals ?? [];
+
+  const topSignals = signals
+    .slice(0, 5)
+    .map((signal: any) => `- ${signal.label}: ${signal.explanation}`)
+    .join("\n");
+
+  return [
+    `Recommandation proposée : ${decisionName}.`,
+    `Score de décision : ${score}/100.`,
+    `Niveau de confiance : ${confidence}/100.`,
+    topSignals
+      ? `Principaux signaux identifiés :\n${topSignals}`
+      : "Aucun signal technique majeur identifié.",
+  ].join("\n\n");
+}
+
 export async function GET(request: Request) {
   const startedAt = new Date();
   const generatedAt = startedAt.toISOString();
@@ -48,6 +111,8 @@ export async function GET(request: Request) {
   const runType = searchParams.get("type") ?? "manual";
   const forecastFor =
     searchParams.get("forecastFor") ?? getForecastFor(runType);
+
+  const recommendationMetadata = getRecommendationMetadata(runType, forecastFor);
 
   const { data: forecastRun, error: forecastRunError } = await supabase
     .from("forecast_runs")
@@ -173,20 +238,31 @@ export async function GET(request: Request) {
         continue;
       }
 
+      const recommendationContext = buildRecommendationContext(analysis);
+
       const { error: forecastResultError } = await supabase
         .from("forecast_results")
         .insert({
           run_id: forecastRun.id,
           etf_id: etf.id,
           ticker: etf.ticker,
+
           decision_level: analysis.decision.decisionLevel,
           decision_name: analysis.decision.decisionName,
           decision_score: analysis.decision.score,
           decision_confidence: analysis.decision.confidence,
+
           close_price: analysis.snapshot.close,
           analysis_date: analysis.snapshot.trading_date,
+
           signals: analysis.signals,
           explanation: analysis.explanation,
+
+          recommendation_context: recommendationContext,
+          recommendation_validity: recommendationMetadata.recommendationValidity,
+          recommendation_moment: recommendationMetadata.recommendationMoment,
+          recommendation_target: recommendationMetadata.recommendationTarget,
+
           prediction_horizon: "1d",
           validated: false,
         });
@@ -209,6 +285,7 @@ export async function GET(request: Request) {
         decision: analysis.decision.decisionName,
         score: analysis.decision.score,
         confidence: analysis.decision.confidence,
+        recommendationTarget: recommendationMetadata.recommendationTarget,
         signals: analysis.signals.length,
       });
     } catch (error) {
@@ -248,6 +325,9 @@ export async function GET(request: Request) {
     forecastRunId: forecastRun.id,
     runType,
     forecastFor,
+    recommendationMoment: recommendationMetadata.recommendationMoment,
+    recommendationTarget: recommendationMetadata.recommendationTarget,
+    recommendationValidity: recommendationMetadata.recommendationValidity,
     totalEtfs: etfs.length,
     successful,
     skipped,
