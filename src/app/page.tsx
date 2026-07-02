@@ -1451,7 +1451,6 @@ async function loadPortfolioRealizedSummary(
                     </table>
                     </div>
 
-              
               </div>
             )}
             
